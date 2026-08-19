@@ -8,6 +8,7 @@ const supabase = createClient(
 let signedInUser = null;
 let selectedMember = null;
 let activeChatId = null;
+let unreadMessageCount = 0;
 const localLaunch = window.launchApp;
 
 function addProfileSetupFields() {
@@ -21,6 +22,8 @@ document.querySelector('.my-card').onclick = () => openMyProfile();
 
 function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
+  const messagesNav = document.querySelector('.nav-item[data-view="messages"]');
+  messagesNav.insertAdjacentHTML('beforeend', '<b id="messageCount" class="nav-badge" style="display:none">0</b>');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
   const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
   const internshipButton = document.createElement('button'); internshipButton.textContent = 'Post internship'; internshipButton.onclick = () => document.getElementById('internshipModal').classList.add('show'); document.querySelector('.weekly-card').appendChild(internshipButton);
@@ -78,8 +81,15 @@ window.launchApp = async function () {
       avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
     }
     const bio = document.getElementById('profileBioInput').value.trim();
-    const { error } = await supabase.from('student_profiles').insert({ id: user.id, full_name: name, university, course, interests, bio, avatar_url });
-    if (error) return message(error.message);
+    const { error } = await supabase.rpc('create_bondly_profile', {
+      profile_name: name,
+      profile_university: university,
+      profile_course: course,
+      profile_interests: interests,
+      profile_bio: bio,
+      profile_avatar_url: avatar_url
+    });
+    if (error) return message(`Could not save your profile: ${error.message}`);
   }
   localLaunch();
   const { data: currentProfile } = await supabase.from('student_profiles').select('avatar_url').eq('id', user.id).single();
@@ -129,6 +139,7 @@ async function resumeChat(chatId, person) {
   activeChatId = chatId; selectedMember = person;
   document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small>`;
   document.querySelectorAll('.chat-person').forEach((row) => row.classList.remove('active'));
+  unreadMessageCount = 0; updateMessageBadge();
   await loadMessages(); window.showView('messages');
 }
 
@@ -315,6 +326,7 @@ async function openDirectChat(person) {
   const { data: chatId, error } = await supabase.rpc('create_bondly_direct_chat', { other_user_id: person.id });
   if (error) return message(error.message);
   activeChatId = chatId;
+  unreadMessageCount = 0; updateMessageBadge();
   document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small>`;
   document.getElementById('messageList').innerHTML = '';
   window.showView('messages');
@@ -352,8 +364,17 @@ document.querySelector('#profile .primary-btn').addEventListener('click', (event
 }, true);
 
 supabase.channel('bondly-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-  if (payload.new.chat_id === activeChatId && payload.new.sender_id !== signedInUser?.id) renderMessage(payload.new);
+  if (payload.new.sender_id === signedInUser?.id) return;
+  if (payload.new.chat_id === activeChatId) renderMessage(payload.new);
+  else { unreadMessageCount += 1; updateMessageBadge(); loadChats(); }
 }).subscribe();
+
+function updateMessageBadge() {
+  const badge = document.getElementById('messageCount');
+  if (!badge) return;
+  badge.textContent = unreadMessageCount;
+  badge.style.cssText = unreadMessageCount ? 'display:inline-block;margin-left:auto;background:#f0826c;color:#fff;border-radius:99px;padding:2px 6px;font-size:11px' : 'display:none';
+}
 
 window.publishInternship = async function () {
   const title = document.getElementById('internshipTitle').value.trim();
