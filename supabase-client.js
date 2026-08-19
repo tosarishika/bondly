@@ -433,7 +433,7 @@ window.showNotifications = async function () { await loadNotifications(); window
 
 async function loadNotifications() {
   if (!signedInUser) return;
-  const { data } = await supabase.from('notifications').select('*').eq('recipient_id', signedInUser.id).order('created_at', { ascending: false });
+  const { data } = await supabase.from('notifications').select('*').eq('recipient_id', signedInUser.id).eq('read', false).order('created_at', { ascending: false });
   const list = document.getElementById('notificationsList'); if (!list || !data) return;
   list.innerHTML = '';
   data.forEach((notice) => {
@@ -474,3 +474,9 @@ supabase.channel('bondly-notifications').on('postgres_changes', { event: 'INSERT
 function escapeHtml(value) { return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char])); }
 
 supabase.auth.onAuthStateChange((_event, session) => { signedInUser = session?.user || null; });
+
+// Supabase keeps a signed-in session in the browser, so returning students skip the cover/login screen.
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) await window.launchApp();
+})();
