@@ -324,6 +324,11 @@ async function loadRealPosts() {
   const { data } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, course, interests, bio, avatar_url), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
   if (!data) return;
   const container = document.getElementById('highlightsFeed'); container.innerHTML = '';
+  const postIds = data.map((post) => post.id);
+  const [{ data: likes = [] }, { data: comments = [] }] = await Promise.all([
+    supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
+    supabase.from('post_comments').select('id, post_id, body, created_at, user_id, student_profiles(full_name, avatar_url)').in('post_id', postIds).order('created_at', { ascending: true })
+  ]);
   data.forEach((post) => {
     const element = document.createElement('article'); element.className = 'post';
     const photos = document.createElement('div'); photos.className = 'post-images';
@@ -331,8 +336,38 @@ async function loadRealPosts() {
     element.innerHTML = `<div class="post-head" style="cursor:pointer"><div class="avatar me"></div><div><h4>${escapeHtml(post.student_profiles?.full_name || 'Student')} <small>· ${escapeHtml(post.student_profiles?.university || '')}</small></h4><small>Highlights of the Week</small></div></div>`;
     if (post.student_profiles?.id !== signedInUser.id) element.querySelector('.post-head').onclick = () => openRealProfile(post.student_profiles);
     element.appendChild(photos);
-    const body = document.createElement('div'); body.className = 'post-body'; body.innerHTML = `<p>${escapeHtml(post.caption)}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`; element.appendChild(body); container.appendChild(element);
+    const postLikes = likes.filter((like) => like.post_id === post.id);
+    const postComments = comments.filter((comment) => comment.post_id === post.id);
+    const liked = postLikes.some((like) => like.user_id === signedInUser.id);
+    const body = document.createElement('div'); body.className = 'post-body';
+    body.innerHTML = `<div class="post-actions"><button class="post-action ${liked ? 'liked' : ''}" aria-label="Like highlight">${liked ? '♥' : '♡'} <span>${postLikes.length || ''}</span></button><button class="post-action comment-toggle" aria-label="Comment on highlight">◌ <span>${postComments.length || ''}</span></button></div><p>${escapeHtml(post.caption)}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`;
+    body.querySelector('.post-action').onclick = () => togglePostLike(post.id);
+    const commentsArea = document.createElement('div'); commentsArea.className = 'post-comments';
+    commentsArea.innerHTML = postComments.map((comment) => `<p><b>${escapeHtml(comment.student_profiles?.full_name || 'Student')}</b> ${escapeHtml(comment.body)}</p>`).join('');
+    const composer = document.createElement('div'); composer.className = 'comment-composer'; composer.innerHTML = '<input maxlength="500" placeholder="Add a comment…"><button>Post</button>';
+    composer.querySelector('button').onclick = () => addPostComment(post.id, composer.querySelector('input').value);
+    composer.querySelector('input').onkeydown = (event) => { if (event.key === 'Enter') addPostComment(post.id, event.currentTarget.value); };
+    body.querySelector('.comment-toggle').onclick = () => { commentsArea.classList.toggle('show'); composer.classList.toggle('show'); if (commentsArea.classList.contains('show')) composer.querySelector('input').focus(); };
+    body.append(commentsArea, composer); element.appendChild(body); container.appendChild(element);
   });
+}
+
+async function togglePostLike(postId) {
+  const { data: existing, error: checkError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', signedInUser.id).maybeSingle();
+  if (checkError) return message(checkError.message);
+  const result = existing
+    ? await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', signedInUser.id)
+    : await supabase.from('post_likes').insert({ post_id: postId, user_id: signedInUser.id });
+  if (result.error) return message(result.error.message);
+  await loadRealPosts();
+}
+
+async function addPostComment(postId, body) {
+  const text = String(body || '').trim();
+  if (!text) return;
+  const { error } = await supabase.from('post_comments').insert({ post_id: postId, user_id: signedInUser.id, body: text });
+  if (error) return message(error.message);
+  await loadRealPosts();
 }
 
 async function openDirectChat(person) {
