@@ -372,7 +372,10 @@ async function loadNotifications() {
     const card = document.createElement('div'); card.className = 'list-card';
     const sender = notice.type === 'connection_request' ? 'A student' : 'Bondly';
     card.innerHTML = `<h3>${notice.type === 'connection_request' ? 'Connection request' : 'Internship match'}</h3><p><b>${escapeHtml(sender)}</b> ${escapeHtml(notice.body)}</p>`;
-    if (notice.type === 'connection_request') { const accept = document.createElement('button'); accept.className = 'primary-btn'; accept.style.cssText = 'margin-top:10px;padding:9px 13px'; accept.textContent = 'Accept'; accept.onclick = () => acceptRequest(notice, accept); card.appendChild(accept); }
+    if (notice.type === 'connection_request') {
+      const accept = document.createElement('button'); accept.className = 'primary-btn'; accept.style.cssText = 'margin-top:10px;padding:9px 13px'; accept.textContent = 'Accept'; accept.onclick = () => acceptRequest(notice, accept); card.appendChild(accept);
+      const reject = document.createElement('button'); reject.className = 'secondary-btn'; reject.style.cssText = 'margin:10px 0 0 8px;color:#b5493a;border-color:#b5493a'; reject.textContent = 'Reject'; reject.onclick = () => rejectRequest(notice, reject); card.appendChild(reject);
+    }
     list.appendChild(card);
   });
   const count = document.getElementById('notificationCount'); const unread = data.filter((notice) => !notice.read).length; count.textContent = unread; count.style.display = unread ? 'inline-block' : 'none';
@@ -385,6 +388,15 @@ async function acceptRequest(notice, button) {
   if (!data?.length) return message('This connection request could not be found. Refresh notifications and try again.');
   await supabase.from('notifications').update({ read: true }).eq('id', notice.id);
   button.textContent = 'Connected'; button.style.opacity = '.65'; await loadNotifications();
+}
+
+async function rejectRequest(notice, button) {
+  button.textContent = 'Rejecting…'; button.disabled = true;
+  const { data, error } = await supabase.from('connections').update({ status: 'declined' }).eq('requester_id', notice.sender_id).eq('recipient_id', signedInUser.id).select();
+  if (error) return message(error.message);
+  if (!data?.length) return message('This connection request could not be found. Refresh notifications and try again.');
+  await supabase.from('notifications').update({ read: true }).eq('id', notice.id);
+  await loadNotifications();
 }
 
 supabase.channel('bondly-notifications').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
