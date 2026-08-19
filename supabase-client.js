@@ -298,14 +298,9 @@ async function loadRealPosts() {
 }
 
 async function openDirectChat(person) {
-  const { data: chat, error } = await supabase.from('chats').insert({ is_group: false }).select().single();
+  const { data: chatId, error } = await supabase.rpc('create_bondly_direct_chat', { other_user_id: person.id });
   if (error) return message(error.message);
-  const { error: membersError } = await supabase.from('chat_members').insert([
-    { chat_id: chat.id, profile_id: signedInUser.id },
-    { chat_id: chat.id, profile_id: person.id }
-  ]);
-  if (membersError) return message(membersError.message);
-  activeChatId = chat.id;
+  activeChatId = chatId;
   document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small>`;
   document.getElementById('messageList').innerHTML = '';
   window.showView('messages');
