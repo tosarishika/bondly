@@ -136,6 +136,8 @@ function openRealProfile(person) {
   document.getElementById('profileBio').textContent = person.bio || 'Bondly student';
   document.getElementById('profileTagOne').textContent = person.interests?.[0] || 'Student';
   document.getElementById('profileTagTwo').textContent = person.interests?.[1] || 'Bondly';
+  const avatar = document.getElementById('profileAvatar');
+  avatar.style.backgroundImage = person.avatar_url ? `url("${person.avatar_url}")` : '';
   const button = document.getElementById('connectButton');
   button.style.display = ''; button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1';
   const messageButton = document.querySelector('#profile .primary-btn');
@@ -280,7 +282,7 @@ window.publishHighlight = async function () {
 };
 
 async function loadRealPosts() {
-  const { data } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, course, interests, bio), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
+  const { data } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, course, interests, bio, avatar_url), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
   if (!data) return;
   const container = document.getElementById('highlightsFeed'); container.innerHTML = '';
   data.forEach((post) => {
