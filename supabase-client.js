@@ -153,7 +153,7 @@ async function resumeChat(chatId, person) {
   await loadMessages(); window.showView('messages');
 }
 
-function openRealProfile(person) {
+async function openRealProfile(person) {
   selectedMember = person;
   document.getElementById('profileName').textContent = person.full_name;
   document.getElementById('profileStudy').textContent = `${person.course || 'Student'} · ${person.university}`;
@@ -164,6 +164,16 @@ function openRealProfile(person) {
   avatar.style.backgroundImage = person.avatar_url ? `url("${person.avatar_url}")` : '';
   const button = document.getElementById('connectButton');
   button.style.display = ''; button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1';
+  button.onclick = window.sendConnectionRequest;
+  const pairFilter = `and(requester_id.eq.${signedInUser.id},recipient_id.eq.${person.id}),and(requester_id.eq.${person.id},recipient_id.eq.${signedInUser.id})`;
+  const { data: connection } = await supabase.from('connections').select('status, requester_id').or(pairFilter).maybeSingle();
+  if (connection?.status === 'accepted') {
+    button.textContent = 'Unfriend'; button.disabled = false; button.style.opacity = '1'; button.onclick = () => unfriendPerson(person.id);
+  } else if (connection?.status === 'pending') {
+    button.textContent = connection.requester_id === signedInUser.id ? 'Request sent' : 'Request received'; button.disabled = true; button.style.opacity = '.65';
+  } else if (connection?.status === 'declined') {
+    button.textContent = 'Request declined'; button.disabled = true; button.style.opacity = '.65';
+  }
   const messageButton = document.querySelector('#profile .primary-btn');
   messageButton.textContent = 'Message'; messageButton.onclick = () => openDirectChat(person);
   window.showView('profile');
@@ -251,10 +261,19 @@ window.searchPeople = async function () { await loadMembers(); window.showView('
 window.sendConnectionRequest = async function () {
   if (!selectedMember) return message('Open a real student profile from Explore first.');
   const { error } = await supabase.from('connections').insert({ requester_id: signedInUser.id, recipient_id: selectedMember.id });
-  if (error && error.code !== '23505') return message(error.message);
+  if (error?.code === '23505') { const button = document.getElementById('connectButton'); button.textContent = 'Request sent'; button.disabled = true; button.style.opacity = '.65'; return; }
+  if (error) return message(error.message);
   await supabase.from('notifications').insert({ recipient_id: selectedMember.id, sender_id: signedInUser.id, type: 'connection_request', body: 'sent you a connection request.' });
   const button = document.getElementById('connectButton'); button.textContent = 'Request sent'; button.disabled = true; button.style.opacity = '.65';
 };
+
+async function unfriendPerson(personId) {
+  if (!window.confirm('Remove this connection?')) return;
+  const pairFilter = `and(requester_id.eq.${signedInUser.id},recipient_id.eq.${personId}),and(requester_id.eq.${personId},recipient_id.eq.${signedInUser.id})`;
+  const { error } = await supabase.from('connections').delete().or(pairFilter);
+  if (error) return message(error.message);
+  const button = document.getElementById('connectButton'); button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1'; button.onclick = window.sendConnectionRequest;
+}
 
 window.uploadNote = async function () {
   const subject = document.getElementById('noteSubject').value.trim();
