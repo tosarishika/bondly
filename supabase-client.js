@@ -24,7 +24,7 @@ function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
   const messagesNav = document.querySelector('.nav-item[data-view="messages"]');
   messagesNav.insertAdjacentHTML('beforeend', '<b id="messageCount" class="nav-badge" style="display:none">0</b>');
-  document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="width:112px;font-size:12px">');
+  document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="showSelectedChatFile()"><button id="chatAttachButton" type="button" title="Attach a photo or PDF" onclick="document.getElementById(\'chatFile\').click()" style="background:transparent;color:#176b57;font-size:21px;padding:2px 5px">📎</button><span id="chatFileName" style="font-size:11px;color:#68817c;max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
   const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
   const internshipButton = document.createElement('button'); internshipButton.textContent = 'Post internship'; internshipButton.onclick = () => document.getElementById('internshipModal').classList.add('show'); document.querySelector('.weekly-card').appendChild(internshipButton);
@@ -371,7 +371,12 @@ window.sendMessage = async function () {
   }
   const { data, error } = await supabase.from('messages').insert({ chat_id: activeChatId, sender_id: signedInUser.id, body, attachment_url, attachment_name, attachment_type }).select().single();
   if (error) return message(error.message);
-  input.value = ''; fileInput.value = ''; renderMessage(data);
+  input.value = ''; fileInput.value = ''; document.getElementById('chatFileName').textContent = ''; renderMessage(data);
+};
+
+window.showSelectedChatFile = function () {
+  const file = document.getElementById('chatFile').files[0];
+  document.getElementById('chatFileName').textContent = file ? file.name : '';
 };
 
 function setChatHeader(person) {
