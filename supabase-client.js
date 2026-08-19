@@ -27,6 +27,10 @@ function setupProductFeatures() {
   document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="showSelectedChatFile()"><button id="chatAttachButton" type="button" title="Attach a photo or PDF" onclick="document.getElementById(\'chatFile\').click()" style="background:transparent;color:#176b57;font-size:21px;padding:2px 5px">📎</button><span id="chatFileName" style="font-size:11px;color:#68817c;max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
   const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
+  const postModal = document.createElement('div'); postModal.className = 'highlight-modal'; postModal.id = 'postModal';
+  postModal.innerHTML = '<div class="dialog" style="max-width:700px;padding:0;overflow:hidden"><button onclick="closePostModal()" aria-label="Close post" style="position:absolute;right:22px;top:18px;z-index:2;border-radius:50%;background:#fff;width:34px;height:34px;font-size:20px">×</button><div id="openedPost"></div></div>';
+  postModal.onclick = (event) => { if (event.target === postModal) window.closePostModal(); };
+  document.body.appendChild(postModal);
   const internshipButton = document.createElement('button'); internshipButton.textContent = 'Post internship'; internshipButton.onclick = () => document.getElementById('internshipModal').classList.add('show'); document.querySelector('.weekly-card').appendChild(internshipButton);
   const modal = document.createElement('div'); modal.className = 'highlight-modal'; modal.id = 'internshipModal';
   modal.innerHTML = '<div class="dialog"><h2>Share an internship</h2><p>Students with the matching interest will be notified.</p><input id="internshipTitle" class="field" placeholder="Role title — e.g. Marketing Intern"><input id="internshipCompany" class="field" placeholder="Company"><select id="internshipField" class="field"><option value="">Choose field</option><option>Marketing</option><option>Finance</option><option>Design</option><option>Technology</option><option>Media</option><option>Consulting</option><option>Engineering</option></select><input id="internshipLocation" class="field" placeholder="Location — e.g. Dubai"><textarea id="internshipDescription" class="field" placeholder="Describe the role, duration, and how to apply"></textarea><input id="internshipLink" class="field" placeholder="Application link (optional)"><p id="internshipError" class="highlight-status"></p><button class="primary-btn wide" onclick="publishInternship()">Post internship</button><div class="switch"><a onclick="document.getElementById(\'internshipModal\').classList.remove(\'show\')">Cancel</a></div></div>';
@@ -336,6 +340,8 @@ async function loadRealPosts() {
     element.innerHTML = `<div class="post-head" style="cursor:pointer"><div class="avatar me"></div><div><h4>${escapeHtml(post.student_profiles?.full_name || 'Student')} <small>· ${escapeHtml(post.student_profiles?.university || '')}</small></h4><small>Highlights of the Week</small></div></div>`;
     if (post.student_profiles?.id !== signedInUser.id) element.querySelector('.post-head').onclick = () => openRealProfile(post.student_profiles);
     element.appendChild(photos);
+    photos.style.cursor = 'pointer';
+    photos.onclick = () => openHighlightPost(post.id);
     const postLikes = likes.filter((like) => like.post_id === post.id);
     const postComments = comments.filter((comment) => comment.post_id === post.id);
     const liked = postLikes.some((like) => like.user_id === signedInUser.id);
@@ -350,6 +356,26 @@ async function loadRealPosts() {
     body.querySelector('.comment-toggle').onclick = () => { commentsArea.classList.toggle('show'); composer.classList.toggle('show'); if (commentsArea.classList.contains('show')) composer.querySelector('input').focus(); };
     body.append(commentsArea, composer); element.appendChild(body); container.appendChild(element);
   });
+}
+
+window.closePostModal = function () { document.getElementById('postModal').classList.remove('show'); };
+
+async function openHighlightPost(postId) {
+  const { data: post, error } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, avatar_url), post_images(*)').eq('id', postId).single();
+  if (error) return message(error.message);
+  const [{ data: likes = [] }, { data: comments = [] }] = await Promise.all([
+    supabase.from('post_likes').select('post_id, user_id').eq('post_id', postId),
+    supabase.from('post_comments').select('id, body, user_id, student_profiles(full_name)').eq('post_id', postId).order('created_at', { ascending: true })
+  ]);
+  const liked = likes.some((like) => like.user_id === signedInUser.id);
+  const images = (post.post_images || []).sort((a, b) => a.position - b.position).map((image) => `<img src="${escapeHtml(image.image_url)}" alt="Highlight photo">`).join('');
+  const commentList = comments.map((comment) => `<p><b>${escapeHtml(comment.student_profiles?.full_name || 'Student')}</b> ${escapeHtml(comment.body)}</p>`).join('') || '<p style="color:#68817c">No comments yet. Be the first.</p>';
+  document.getElementById('openedPost').innerHTML = `<div class="opened-post"><div class="post-head"><div class="avatar me" style="background-image:url('${escapeHtml(post.student_profiles?.avatar_url || '')}')"></div><div><h4>${escapeHtml(post.student_profiles?.full_name || 'Student')} <small>· ${escapeHtml(post.student_profiles?.university || '')}</small></h4><small>Highlights of the Week</small></div></div><div class="opened-post-images">${images}</div><div class="post-body"><div class="post-actions"><button id="modalLikeButton" class="post-action ${liked ? 'liked' : ''}">${liked ? '♥' : '♡'} <span>${likes.length || ''}</span></button><span style="font-size:13px;color:#68817c;padding-top:5px">${comments.length} comment${comments.length === 1 ? '' : 's'}</span></div><p>${escapeHtml(post.caption || '')}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p><div class="opened-comments">${commentList}</div><div class="comment-composer show"><input id="modalCommentInput" maxlength="500" placeholder="Add a comment…"><button id="modalCommentButton">Post</button></div></div></div>`;
+  document.getElementById('modalLikeButton').onclick = async () => { await togglePostLike(postId); await openHighlightPost(postId); };
+  const publish = async () => { const input = document.getElementById('modalCommentInput'); await addPostComment(postId, input.value); await openHighlightPost(postId); };
+  document.getElementById('modalCommentButton').onclick = publish;
+  document.getElementById('modalCommentInput').onkeydown = (event) => { if (event.key === 'Enter') publish(); };
+  document.getElementById('postModal').classList.add('show');
 }
 
 async function togglePostLike(postId) {
