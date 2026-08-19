@@ -113,10 +113,12 @@ async function loadChats() {
   if (!memberships) return;
   const list = document.querySelector('.chat-list');
   list.innerHTML = '';
+  const shownPeople = new Set();
   for (const membership of memberships) {
     const { data: members } = await supabase.from('chat_members').select('profile_id, student_profiles(id, full_name, university)').eq('chat_id', membership.chat_id);
     const other = members?.map((member) => member.student_profiles).find((person) => person?.id !== signedInUser.id);
-    if (!other) continue;
+    if (!other || shownPeople.has(other.id)) continue;
+    shownPeople.add(other.id);
     const row = document.createElement('div'); row.className = 'chat-person';
     row.innerHTML = `<div class="avatar a1"></div><div><strong>${escapeHtml(other.full_name)}</strong><small>${escapeHtml(other.university)}</small></div>`;
     row.onclick = () => resumeChat(membership.chat_id, other); list.appendChild(row);
@@ -202,12 +204,24 @@ async function loadProfilePosts(profileId) {
   let area = document.getElementById('profilePosts');
   if (!area) { area = document.createElement('div'); area.id = 'profilePosts'; area.style.padding = '0 25px 25px'; document.querySelector('.profile-info').appendChild(area); }
   area.innerHTML = '<h3 style="margin:14px 0">Highlights</h3>';
-  if (!data?.length) { area.innerHTML += '<p style="color:#68817c;font-size:14px">No highlights shared yet.</p>'; return; }
-  data.forEach((post) => {
+  if (!data?.length) area.innerHTML += '<p style="color:#68817c;font-size:14px">No highlights shared yet.</p>';
+  data?.forEach((post) => {
     const card = document.createElement('div'); card.className = 'list-card';
     const images = document.createElement('div'); images.style.cssText = 'display:flex;gap:6px;overflow:hidden;margin-bottom:10px';
     post.post_images.sort((a,b) => a.position-b.position).forEach((image) => { const photo = document.createElement('img'); photo.src = image.image_url; photo.alt = 'Highlight photo'; photo.style.cssText = 'width:78px;height:78px;border-radius:8px;object-fit:cover'; images.appendChild(photo); });
     card.appendChild(images); card.innerHTML += `<p>${escapeHtml(post.caption || 'Weekly highlight')}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`; area.appendChild(card);
+  });
+  await loadProfileNotes(profileId, area);
+}
+
+async function loadProfileNotes(profileId, area) {
+  const { data } = await supabase.from('notes').select('subject, topic, study_year, file_url').eq('uploader_id', profileId).order('created_at', { ascending: false });
+  const title = document.createElement('h3'); title.style.margin = '22px 0 10px'; title.textContent = 'Notes uploaded'; area.appendChild(title);
+  if (!data?.length) { const empty = document.createElement('p'); empty.style.cssText = 'color:#68817c;font-size:14px'; empty.textContent = 'No notes uploaded yet.'; area.appendChild(empty); return; }
+  data.forEach((note) => {
+    const card = document.createElement('div'); card.className = 'list-card';
+    card.innerHTML = `<h3>${escapeHtml(note.subject)} — ${escapeHtml(note.topic)}</h3><p>${escapeHtml(note.study_year)}</p>`;
+    const open = document.createElement('a'); open.href = note.file_url; open.target = '_blank'; open.className = 'secondary-btn'; open.style.cssText = 'display:inline-block;margin-top:10px'; open.textContent = 'Open PDF'; card.appendChild(open); area.appendChild(card);
   });
 }
 
