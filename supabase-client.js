@@ -329,10 +329,13 @@ async function loadRealPosts() {
   if (!data) return;
   const container = document.getElementById('highlightsFeed'); container.innerHTML = '';
   const postIds = data.map((post) => post.id);
-  const [{ data: likes = [] }, { data: comments = [] }] = await Promise.all([
+  const [{ data: likesData, error: likesError }, { data: commentsData, error: commentsError }] = await Promise.all([
     supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
     supabase.from('post_comments').select('id, post_id, body, created_at, user_id, student_profiles(full_name, avatar_url)').in('post_id', postIds).order('created_at', { ascending: true })
   ]);
+  // Keep highlights viewable even before the optional likes/comments SQL has been run.
+  const likes = likesError ? [] : (likesData || []);
+  const comments = commentsError ? [] : (commentsData || []);
   data.forEach((post) => {
     const element = document.createElement('article'); element.className = 'post';
     const photos = document.createElement('div'); photos.className = 'post-images';
@@ -363,10 +366,12 @@ window.closePostModal = function () { document.getElementById('postModal').class
 async function openHighlightPost(postId) {
   const { data: post, error } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, avatar_url), post_images(*)').eq('id', postId).single();
   if (error) return message(error.message);
-  const [{ data: likes = [] }, { data: comments = [] }] = await Promise.all([
+  const [{ data: likesData, error: likesError }, { data: commentsData, error: commentsError }] = await Promise.all([
     supabase.from('post_likes').select('post_id, user_id').eq('post_id', postId),
     supabase.from('post_comments').select('id, body, user_id, student_profiles(full_name)').eq('post_id', postId).order('created_at', { ascending: true })
   ]);
+  const likes = likesError ? [] : (likesData || []);
+  const comments = commentsError ? [] : (commentsData || []);
   const liked = likes.some((like) => like.user_id === signedInUser.id);
   const images = (post.post_images || []).sort((a, b) => a.position - b.position).map((image) => `<img src="${escapeHtml(image.image_url)}" alt="Highlight photo">`).join('');
   const commentList = comments.map((comment) => `<p><b>${escapeHtml(comment.student_profiles?.full_name || 'Student')}</b> ${escapeHtml(comment.body)}</p>`).join('') || '<p style="color:#68817c">No comments yet. Be the first.</p>';
