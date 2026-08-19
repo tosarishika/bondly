@@ -14,7 +14,7 @@ function addProfileSetupFields() {
   const card = document.querySelector('.onboard-card');
   if (document.getElementById('profileFullName')) return;
   const universityLabel = [...card.querySelectorAll('label')].find((label) => label.textContent === 'University');
-  universityLabel.insertAdjacentHTML('beforebegin', '<label>Your name</label><input id="profileFullName" class="field" placeholder="Your full name"><label>Profile picture</label><input id="profilePhoto" class="field" type="file" accept="image/*">');
+  universityLabel.insertAdjacentHTML('beforebegin', '<label>Your name</label><input id="profileFullName" class="field" placeholder="Your full name"><label>Profile picture</label><input id="profilePhoto" class="field" type="file" accept="image/*"><label>Short bio</label><textarea id="profileBioInput" class="field" placeholder="A little about you, your interests, or what you are looking for"></textarea>');
 }
 addProfileSetupFields();
 document.querySelector('.my-card').onclick = () => openMyProfile();
@@ -27,6 +27,10 @@ function setupProductFeatures() {
   const modal = document.createElement('div'); modal.className = 'highlight-modal'; modal.id = 'internshipModal';
   modal.innerHTML = '<div class="dialog"><h2>Share an internship</h2><p>Students with the matching interest will be notified.</p><input id="internshipTitle" class="field" placeholder="Role title — e.g. Marketing Intern"><input id="internshipCompany" class="field" placeholder="Company"><select id="internshipField" class="field"><option value="">Choose field</option><option>Marketing</option><option>Finance</option><option>Design</option><option>Technology</option><option>Media</option><option>Consulting</option><option>Engineering</option></select><input id="internshipLocation" class="field" placeholder="Location — e.g. Dubai"><textarea id="internshipDescription" class="field" placeholder="Describe the role, duration, and how to apply"></textarea><input id="internshipLink" class="field" placeholder="Application link (optional)"><p id="internshipError" class="highlight-status"></p><button class="primary-btn wide" onclick="publishInternship()">Post internship</button><div class="switch"><a onclick="document.getElementById(\'internshipModal\').classList.remove(\'show\')">Cancel</a></div></div>';
   document.body.appendChild(modal);
+
+  const editModal = document.createElement('div'); editModal.className = 'highlight-modal'; editModal.id = 'editProfileModal';
+  editModal.innerHTML = '<div class="dialog"><h2>Edit your profile</h2><label>Name</label><input id="editName" class="field"><label>Profile picture</label><input id="editPhoto" class="field" type="file" accept="image/*"><label>University</label><select id="editUniversity" class="field"><option>University of Dubai</option><option>American University of Sharjah</option><option>Heriot-Watt University Dubai</option><option>University of Birmingham Dubai</option><option>Zayed University</option></select><label>Course and year</label><input id="editCourse" class="field" placeholder="e.g. Business Management, Year 2"><label>Bio</label><textarea id="editBio" class="field"></textarea><label>Interests</label><input id="editInterests" class="field" placeholder="Marketing, Finance, Design"><p id="editProfileError" class="highlight-status"></p><button class="primary-btn wide" onclick="saveProfileEdits()">Save changes</button><div class="switch"><a onclick="document.getElementById(\'editProfileModal\').classList.remove(\'show\')">Cancel</a></div></div>';
+  document.body.appendChild(editModal);
 }
 setupProductFeatures();
 
@@ -72,7 +76,8 @@ window.launchApp = async function () {
       if (photoError) return message(photoError.message);
       avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
     }
-    const { error } = await supabase.from('student_profiles').insert({ id: user.id, full_name: name, university, course, interests, avatar_url });
+    const bio = document.getElementById('profileBioInput').value.trim();
+    const { error } = await supabase.from('student_profiles').insert({ id: user.id, full_name: name, university, course, interests, bio, avatar_url });
     if (error) return message(error.message);
   }
   localLaunch();
@@ -156,11 +161,38 @@ async function openMyProfile() {
 
 async function editMyProfile() {
   const { data: mine } = await supabase.from('student_profiles').select('*').eq('id', signedInUser.id).single();
-  const full_name = window.prompt('Your name', mine.full_name); if (full_name === null) return;
-  const bio = window.prompt('Your short bio', mine.bio || ''); if (bio === null) return;
-  const { error } = await supabase.from('student_profiles').update({ full_name: full_name.trim(), bio: bio.trim() }).eq('id', signedInUser.id);
-  if (error) return message(error.message); await openMyProfile();
+  document.getElementById('editName').value = mine.full_name || '';
+  document.getElementById('editUniversity').value = mine.university || 'University of Dubai';
+  document.getElementById('editCourse').value = mine.course || '';
+  document.getElementById('editBio').value = mine.bio || '';
+  document.getElementById('editInterests').value = (mine.interests || []).join(', ');
+  document.getElementById('editProfileModal').classList.add('show');
 }
+
+window.saveProfileEdits = async function () {
+  const full_name = document.getElementById('editName').value.trim();
+  const university = document.getElementById('editUniversity').value;
+  const course = document.getElementById('editCourse').value.trim();
+  const bio = document.getElementById('editBio').value.trim();
+  const interests = document.getElementById('editInterests').value.split(',').map((item) => item.trim()).filter(Boolean);
+  const errorBox = document.getElementById('editProfileError');
+  if (!full_name) { errorBox.textContent = 'Please add your name.'; return; }
+  const update = { full_name, university, course, bio, interests };
+  const photo = document.getElementById('editPhoto').files[0];
+  if (photo) {
+    const path = `${signedInUser.id}/profile-${crypto.randomUUID()}-${photo.name}`;
+    const { error: photoError } = await supabase.storage.from('highlight-images').upload(path, photo, { contentType: photo.type });
+    if (photoError) { errorBox.textContent = photoError.message; return; }
+    update.avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
+  }
+  const { error } = await supabase.from('student_profiles').update(update).eq('id', signedInUser.id);
+  if (error) { errorBox.textContent = error.message; return; }
+  document.getElementById('editProfileModal').classList.remove('show');
+  document.getElementById('editPhoto').value = '';
+  await openMyProfile();
+  await loadMembers();
+  document.querySelectorAll('.avatar.me').forEach((avatar) => { if (update.avatar_url) avatar.style.backgroundImage = `url("${update.avatar_url}")`; });
+};
 
 async function loadProfilePosts(profileId) {
   const { data } = await supabase.from('posts').select('caption, hashtags, post_images(image_url, position)').eq('author_id', profileId).order('created_at', { ascending: false });
@@ -349,10 +381,12 @@ async function loadNotifications() {
 }
 
 async function acceptRequest(notice, button) {
-  const { error } = await supabase.from('connections').update({ status: 'accepted' }).eq('requester_id', notice.sender_id).eq('recipient_id', signedInUser.id);
+  button.textContent = 'Accepting…'; button.disabled = true;
+  const { data, error } = await supabase.from('connections').update({ status: 'accepted' }).eq('requester_id', notice.sender_id).eq('recipient_id', signedInUser.id).select();
   if (error) return message(error.message);
+  if (!data?.length) return message('This connection request could not be found. Refresh notifications and try again.');
   await supabase.from('notifications').update({ read: true }).eq('id', notice.id);
-  button.textContent = 'Connected'; button.disabled = true; button.style.opacity = '.65';
+  button.textContent = 'Connected'; button.style.opacity = '.65'; await loadNotifications();
 }
 
 supabase.channel('bondly-notifications').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
