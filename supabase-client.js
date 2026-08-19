@@ -24,6 +24,7 @@ function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
   const messagesNav = document.querySelector('.nav-item[data-view="messages"]');
   messagesNav.insertAdjacentHTML('beforeend', '<b id="messageCount" class="nav-badge" style="display:none">0</b>');
+  document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="width:112px;font-size:12px">');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
   const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
   const internshipButton = document.createElement('button'); internshipButton.textContent = 'Post internship'; internshipButton.onclick = () => document.getElementById('internshipModal').classList.add('show'); document.querySelector('.weekly-card').appendChild(internshipButton);
@@ -137,7 +138,7 @@ async function loadChats() {
 
 async function resumeChat(chatId, person) {
   activeChatId = chatId; selectedMember = person;
-  document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small>`;
+  setChatHeader(person);
   document.querySelectorAll('.chat-person').forEach((row) => row.classList.remove('active'));
   unreadMessageCount = 0; updateMessageBadge();
   await loadMessages(); window.showView('messages');
@@ -327,7 +328,7 @@ async function openDirectChat(person) {
   if (error) return message(error.message);
   activeChatId = chatId;
   unreadMessageCount = 0; updateMessageBadge();
-  document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small>`;
+  setChatHeader(person);
   document.getElementById('messageList').innerHTML = '';
   window.showView('messages');
   await loadChats();
@@ -344,17 +345,44 @@ async function loadMessages() {
 function renderMessage(item) {
   const bubble = document.createElement('div');
   bubble.className = item.sender_id === signedInUser.id ? 'bubble-msg mine' : 'bubble-msg';
-  bubble.textContent = item.body;
+  if (item.body) bubble.append(document.createTextNode(item.body));
+  if (item.attachment_url) {
+    const attachment = document.createElement(item.attachment_type?.startsWith('image/') ? 'img' : 'a');
+    if (attachment.tagName === 'IMG') { attachment.src = item.attachment_url; attachment.alt = item.attachment_name || 'Image'; attachment.style.cssText = 'display:block;max-width:190px;max-height:190px;object-fit:cover;border-radius:8px;margin-top:7px'; }
+    else { attachment.href = item.attachment_url; attachment.target = '_blank'; attachment.textContent = `Open ${item.attachment_name || 'file'}`; attachment.style.cssText = 'display:block;color:inherit;text-decoration:underline;margin-top:7px'; }
+    bubble.appendChild(attachment);
+  }
   document.getElementById('messageList').appendChild(bubble);
 }
 
 window.sendMessage = async function () {
   if (!activeChatId) return message('Open a student profile and choose Message to start a chat.');
   const input = document.getElementById('messageInput');
-  const body = input.value.trim(); if (!body) return;
-  const { data, error } = await supabase.from('messages').insert({ chat_id: activeChatId, sender_id: signedInUser.id, body }).select().single();
+  const fileInput = document.getElementById('chatFile');
+  const body = input.value.trim(); const file = fileInput.files[0];
+  if (!body && !file) return;
+  let attachment_url = null, attachment_name = null, attachment_type = null;
+  if (file) {
+    const path = `${signedInUser.id}/${activeChatId}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const { error: uploadError } = await supabase.storage.from('chat-files').upload(path, file, { contentType: file.type });
+    if (uploadError) return message(uploadError.message);
+    attachment_url = supabase.storage.from('chat-files').getPublicUrl(path).data.publicUrl;
+    attachment_name = file.name; attachment_type = file.type;
+  }
+  const { data, error } = await supabase.from('messages').insert({ chat_id: activeChatId, sender_id: signedInUser.id, body, attachment_url, attachment_name, attachment_type }).select().single();
   if (error) return message(error.message);
-  input.value = ''; renderMessage(data);
+  input.value = ''; fileInput.value = ''; renderMessage(data);
+};
+
+function setChatHeader(person) {
+  document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small><button onclick="deleteActiveChat()" style="float:right;border:0;background:transparent;color:#b5493a;font-weight:700;cursor:pointer">Delete chat</button>`;
+}
+
+window.deleteActiveChat = async function () {
+  if (!activeChatId || !window.confirm('Delete this chat and all its messages? This cannot be undone.')) return;
+  const { error } = await supabase.rpc('delete_bondly_chat', { target_chat_id: activeChatId });
+  if (error) return message(error.message);
+  activeChatId = null; document.getElementById('messageList').innerHTML = ''; document.getElementById('chatHead').textContent = 'Choose a chat'; await loadChats();
 };
 
 document.querySelector('#profile .primary-btn').addEventListener('click', (event) => {
