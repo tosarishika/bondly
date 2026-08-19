@@ -10,6 +10,26 @@ let selectedMember = null;
 let activeChatId = null;
 const localLaunch = window.launchApp;
 
+function addProfileSetupFields() {
+  const card = document.querySelector('.onboard-card');
+  if (document.getElementById('profileFullName')) return;
+  const universityLabel = [...card.querySelectorAll('label')].find((label) => label.textContent === 'University');
+  universityLabel.insertAdjacentHTML('beforebegin', '<label>Your name</label><input id="profileFullName" class="field" placeholder="Your full name"><label>Profile picture</label><input id="profilePhoto" class="field" type="file" accept="image/*">');
+}
+addProfileSetupFields();
+document.querySelector('.my-card').onclick = () => openMyProfile();
+
+function setupProductFeatures() {
+  const topbar = document.querySelector('.topbar');
+  topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
+  const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
+  const internshipButton = document.createElement('button'); internshipButton.textContent = 'Post internship'; internshipButton.onclick = () => document.getElementById('internshipModal').classList.add('show'); document.querySelector('.weekly-card').appendChild(internshipButton);
+  const modal = document.createElement('div'); modal.className = 'highlight-modal'; modal.id = 'internshipModal';
+  modal.innerHTML = '<div class="dialog"><h2>Share an internship</h2><p>Students with the matching interest will be notified.</p><input id="internshipTitle" class="field" placeholder="Role title — e.g. Marketing Intern"><input id="internshipCompany" class="field" placeholder="Company"><select id="internshipField" class="field"><option value="">Choose field</option><option>Marketing</option><option>Finance</option><option>Design</option><option>Technology</option><option>Media</option><option>Consulting</option><option>Engineering</option></select><input id="internshipLocation" class="field" placeholder="Location — e.g. Dubai"><textarea id="internshipDescription" class="field" placeholder="Describe the role, duration, and how to apply"></textarea><input id="internshipLink" class="field" placeholder="Application link (optional)"><p id="internshipError" class="highlight-status"></p><button class="primary-btn wide" onclick="publishInternship()">Post internship</button><div class="switch"><a onclick="document.getElementById(\'internshipModal\').classList.remove(\'show\')">Cancel</a></div></div>';
+  document.body.appendChild(modal);
+}
+setupProductFeatures();
+
 function message(text) { window.alert(text); }
 
 async function requireUser() {
@@ -37,19 +57,32 @@ window.launchApp = async function () {
   if (!user) return message('Please log in with your email first.');
   const { data: existing } = await supabase.from('student_profiles').select('*').eq('id', user.id).maybeSingle();
   if (!existing) {
-    const name = window.prompt('What name should other students see?')?.trim();
-    if (!name) return message('A name is needed to create your student profile.');
+    const setup = document.getElementById('onboarding');
+    if (!setup.classList.contains('show')) { setup.classList.add('show'); return; }
+    const name = document.getElementById('profileFullName').value.trim();
+    if (!name) return message('Please add your name to create your student profile.');
     const university = document.querySelector('.onboard-card select')?.value || 'Not yet selected';
-    const course = document.querySelector('.onboard-card input')?.value || '';
+    const course = document.querySelector('.onboard-card input[placeholder*="Business"]')?.value || '';
     const interests = [...document.querySelectorAll('.chip.selected')].map((chip) => chip.textContent);
-    const { error } = await supabase.from('student_profiles').insert({ id: user.id, full_name: name, university, course, interests });
+    let avatar_url = null;
+    const photo = document.getElementById('profilePhoto').files[0];
+    if (photo) {
+      const path = `${user.id}/profile-${crypto.randomUUID()}-${photo.name}`;
+      const { error: photoError } = await supabase.storage.from('highlight-images').upload(path, photo, { contentType: photo.type });
+      if (photoError) return message(photoError.message);
+      avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
+    }
+    const { error } = await supabase.from('student_profiles').insert({ id: user.id, full_name: name, university, course, interests, avatar_url });
     if (error) return message(error.message);
   }
   localLaunch();
+  const { data: currentProfile } = await supabase.from('student_profiles').select('avatar_url').eq('id', user.id).single();
+  if (currentProfile?.avatar_url) document.querySelectorAll('.avatar.me').forEach((avatar) => { avatar.style.backgroundImage = `url("${currentProfile.avatar_url}")`; });
   await loadMembers();
   await loadChats();
   await loadRealPosts();
   await loadNotes();
+  await loadNotifications();
 };
 
 async function loadMembers() {
@@ -99,8 +132,48 @@ function openRealProfile(person) {
   document.getElementById('profileTagOne').textContent = person.interests?.[0] || 'Student';
   document.getElementById('profileTagTwo').textContent = person.interests?.[1] || 'Bondly';
   const button = document.getElementById('connectButton');
-  button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1';
+  button.style.display = ''; button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1';
+  const messageButton = document.querySelector('#profile .primary-btn');
+  messageButton.textContent = 'Message'; messageButton.onclick = () => openDirectChat(person);
   window.showView('profile');
+  loadProfilePosts(person.id);
+}
+
+async function openMyProfile() {
+  const { data: mine } = await supabase.from('student_profiles').select('*').eq('id', signedInUser.id).single();
+  if (!mine) return;
+  selectedMember = null;
+  document.getElementById('profileName').textContent = mine.full_name;
+  document.getElementById('profileStudy').textContent = `${mine.course || 'Student'} · ${mine.university}`;
+  document.getElementById('profileBio').textContent = mine.bio || 'Add a short bio to help students know you.';
+  document.getElementById('profileTagOne').textContent = mine.interests?.[0] || 'Student';
+  document.getElementById('profileTagTwo').textContent = mine.interests?.[1] || 'Bondly';
+  const avatar = document.getElementById('profileAvatar'); if (mine.avatar_url) avatar.style.backgroundImage = `url("${mine.avatar_url}")`;
+  const connect = document.getElementById('connectButton'); connect.style.display = 'none';
+  const edit = document.querySelector('#profile .primary-btn'); edit.textContent = 'Edit profile'; edit.onclick = editMyProfile;
+  window.showView('profile'); loadProfilePosts(mine.id);
+}
+
+async function editMyProfile() {
+  const { data: mine } = await supabase.from('student_profiles').select('*').eq('id', signedInUser.id).single();
+  const full_name = window.prompt('Your name', mine.full_name); if (full_name === null) return;
+  const bio = window.prompt('Your short bio', mine.bio || ''); if (bio === null) return;
+  const { error } = await supabase.from('student_profiles').update({ full_name: full_name.trim(), bio: bio.trim() }).eq('id', signedInUser.id);
+  if (error) return message(error.message); await openMyProfile();
+}
+
+async function loadProfilePosts(profileId) {
+  const { data } = await supabase.from('posts').select('caption, hashtags, post_images(image_url, position)').eq('author_id', profileId).order('created_at', { ascending: false });
+  let area = document.getElementById('profilePosts');
+  if (!area) { area = document.createElement('div'); area.id = 'profilePosts'; area.style.padding = '0 25px 25px'; document.querySelector('.profile-info').appendChild(area); }
+  area.innerHTML = '<h3 style="margin:14px 0">Highlights</h3>';
+  if (!data?.length) { area.innerHTML += '<p style="color:#68817c;font-size:14px">No highlights shared yet.</p>'; return; }
+  data.forEach((post) => {
+    const card = document.createElement('div'); card.className = 'list-card';
+    const images = document.createElement('div'); images.style.cssText = 'display:flex;gap:6px;overflow:hidden;margin-bottom:10px';
+    post.post_images.sort((a,b) => a.position-b.position).forEach((image) => { const photo = document.createElement('img'); photo.src = image.image_url; photo.alt = 'Highlight photo'; photo.style.cssText = 'width:78px;height:78px;border-radius:8px;object-fit:cover'; images.appendChild(photo); });
+    card.appendChild(images); card.innerHTML += `<p>${escapeHtml(post.caption || 'Weekly highlight')}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`; area.appendChild(card);
+  });
 }
 
 window.searchPeople = async function () { await loadMembers(); window.showView('explore'); };
@@ -109,6 +182,7 @@ window.sendConnectionRequest = async function () {
   if (!selectedMember) return message('Open a real student profile from Explore first.');
   const { error } = await supabase.from('connections').insert({ requester_id: signedInUser.id, recipient_id: selectedMember.id });
   if (error && error.code !== '23505') return message(error.message);
+  await supabase.from('notifications').insert({ recipient_id: selectedMember.id, sender_id: signedInUser.id, type: 'connection_request', body: 'sent you a connection request.' });
   const button = document.getElementById('connectButton'); button.textContent = 'Request sent'; button.disabled = true; button.style.opacity = '.65';
 };
 
@@ -136,8 +210,20 @@ async function loadNotes() {
   data.forEach((note) => {
     const card = document.createElement('div'); card.className = 'list-card';
     card.innerHTML = `<h3>${escapeHtml(note.subject)} — ${escapeHtml(note.topic)}</h3><p>${escapeHtml(note.study_year)} · Uploaded by ${escapeHtml(note.student_profiles?.full_name || 'student')}</p>`;
-    const open = document.createElement('a'); open.href = note.file_url; open.target = '_blank'; open.className = 'secondary-btn'; open.style.cssText = 'display:inline-block;margin-top:10px'; open.textContent = 'Open PDF'; card.appendChild(open); list.appendChild(card);
+    const open = document.createElement('a'); open.href = note.file_url; open.target = '_blank'; open.className = 'secondary-btn'; open.style.cssText = 'display:inline-block;margin-top:10px'; open.textContent = 'Open PDF'; card.appendChild(open);
+    if (note.uploader_id === signedInUser.id) { const remove = document.createElement('button'); remove.className = 'secondary-btn'; remove.style.cssText = 'margin:10px 0 0 8px;color:#b5493a;border-color:#b5493a'; remove.textContent = 'Delete'; remove.onclick = () => deleteNote(note); card.appendChild(remove); }
+    list.appendChild(card);
   });
+}
+
+async function deleteNote(note) {
+  if (!window.confirm(`Delete “${note.subject} — ${note.topic}”?`)) return;
+  const marker = '/note-files/';
+  const path = decodeURIComponent(note.file_url.split(marker)[1] || '');
+  const { error } = await supabase.from('notes').delete().eq('id', note.id);
+  if (error) return message(error.message);
+  if (path) await supabase.storage.from('note-files').remove([path]);
+  await loadNotes();
 }
 
 window.publishHighlight = async function () {
@@ -223,6 +309,54 @@ document.querySelector('#profile .primary-btn').addEventListener('click', (event
 
 supabase.channel('bondly-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
   if (payload.new.chat_id === activeChatId && payload.new.sender_id !== signedInUser?.id) renderMessage(payload.new);
+}).subscribe();
+
+window.publishInternship = async function () {
+  const title = document.getElementById('internshipTitle').value.trim();
+  const company = document.getElementById('internshipCompany').value.trim();
+  const field = document.getElementById('internshipField').value;
+  const location = document.getElementById('internshipLocation').value.trim();
+  const description = document.getElementById('internshipDescription').value.trim();
+  const application_url = document.getElementById('internshipLink').value.trim();
+  const errorBox = document.getElementById('internshipError');
+  if (!title || !company || !field || !description) { errorBox.textContent = 'Please add a title, company, field, and description.'; return; }
+  const { data: post, error } = await supabase.from('posts').insert({ author_id: signedInUser.id, kind: 'internship', caption: description, hashtags: ['#internship', `#${field.toLowerCase()}`] }).select().single();
+  if (error) { errorBox.textContent = error.message; return; }
+  const { error: opportunityError } = await supabase.from('opportunities').insert({ post_id: post.id, title, company, field, location, description, application_url });
+  if (opportunityError) { errorBox.textContent = opportunityError.message; return; }
+  const { data: matches } = await supabase.from('student_profiles').select('id').contains('interests', [field]).neq('id', signedInUser.id);
+  if (matches?.length) await supabase.from('notifications').insert(matches.map((student) => ({ recipient_id: student.id, sender_id: signedInUser.id, type: 'internship', body: `${title} at ${company} matches your ${field} interest.` })));
+  document.getElementById('internshipModal').classList.remove('show');
+  ['internshipTitle','internshipCompany','internshipField','internshipLocation','internshipDescription','internshipLink'].forEach((id) => { document.getElementById(id).value = ''; });
+  message('Internship posted. Matching students have been notified.');
+};
+
+window.showNotifications = async function () { await loadNotifications(); window.showView('notifications'); };
+
+async function loadNotifications() {
+  if (!signedInUser) return;
+  const { data } = await supabase.from('notifications').select('*').eq('recipient_id', signedInUser.id).order('created_at', { ascending: false });
+  const list = document.getElementById('notificationsList'); if (!list || !data) return;
+  list.innerHTML = '';
+  data.forEach((notice) => {
+    const card = document.createElement('div'); card.className = 'list-card';
+    const sender = notice.type === 'connection_request' ? 'A student' : 'Bondly';
+    card.innerHTML = `<h3>${notice.type === 'connection_request' ? 'Connection request' : 'Internship match'}</h3><p><b>${escapeHtml(sender)}</b> ${escapeHtml(notice.body)}</p>`;
+    if (notice.type === 'connection_request') { const accept = document.createElement('button'); accept.className = 'primary-btn'; accept.style.cssText = 'margin-top:10px;padding:9px 13px'; accept.textContent = 'Accept'; accept.onclick = () => acceptRequest(notice, accept); card.appendChild(accept); }
+    list.appendChild(card);
+  });
+  const count = document.getElementById('notificationCount'); const unread = data.filter((notice) => !notice.read).length; count.textContent = unread; count.style.display = unread ? 'inline-block' : 'none';
+}
+
+async function acceptRequest(notice, button) {
+  const { error } = await supabase.from('connections').update({ status: 'accepted' }).eq('requester_id', notice.sender_id).eq('recipient_id', signedInUser.id);
+  if (error) return message(error.message);
+  await supabase.from('notifications').update({ read: true }).eq('id', notice.id);
+  button.textContent = 'Connected'; button.disabled = true; button.style.opacity = '.65';
+}
+
+supabase.channel('bondly-notifications').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
+  if (payload.new.recipient_id === signedInUser?.id) loadNotifications();
 }).subscribe();
 
 function escapeHtml(value) { return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char])); }
