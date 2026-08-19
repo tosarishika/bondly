@@ -35,6 +35,11 @@ function setupProductFeatures() {
   const editModal = document.createElement('div'); editModal.className = 'highlight-modal'; editModal.id = 'editProfileModal';
   editModal.innerHTML = '<div class="dialog"><h2>Edit your profile</h2><label>Name</label><input id="editName" class="field"><label>Profile picture</label><input id="editPhoto" class="field" type="file" accept="image/*"><label>University</label><select id="editUniversity" class="field"><option>University of Dubai</option><option>American University of Sharjah</option><option>Heriot-Watt University Dubai</option><option>University of Birmingham Dubai</option><option>Zayed University</option></select><label>Course and year</label><input id="editCourse" class="field" placeholder="e.g. Business Management, Year 2"><label>Bio</label><textarea id="editBio" class="field"></textarea><label>Interests</label><input id="editInterests" class="field" placeholder="Marketing, Finance, Design"><p id="editProfileError" class="highlight-status"></p><button class="primary-btn wide" onclick="saveProfileEdits()">Save changes</button><div class="switch"><a onclick="document.getElementById(\'editProfileModal\').classList.remove(\'show\')">Cancel</a></div></div>';
   document.body.appendChild(editModal);
+
+  const highlightModal = document.getElementById('highlightModal');
+  highlightModal.querySelector('p').textContent = 'Add 1–7 photos, then write a caption and your hashtags.';
+  const preview = document.createElement('div'); preview.id = 'highlightPreviews'; preview.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 16px';
+  document.getElementById('highlightCount').insertAdjacentElement('afterend', preview);
 }
 setupProductFeatures();
 
@@ -292,7 +297,7 @@ window.publishHighlight = async function () {
   const caption = document.getElementById('highlightCaption').value.trim();
   const hashtags = document.getElementById('highlightTags').value.trim().split(/\s+/).filter(Boolean);
   const errorBox = document.getElementById('highlightError');
-  if (files.length < 4 || files.length > 7) { errorBox.textContent = 'Please choose between 4 and 7 photos.'; return; }
+  if (files.length < 1 || files.length > 7) { errorBox.textContent = 'Please choose between 1 and 7 photos.'; return; }
   const { data: post, error } = await supabase.from('posts').insert({ author_id: signedInUser.id, kind: 'weekly_highlight', caption, hashtags }).select().single();
   if (error) { errorBox.textContent = error.message; return; }
   const imageRows = [];
@@ -306,6 +311,13 @@ window.publishHighlight = async function () {
   const { error: rowsError } = await supabase.from('post_images').insert(imageRows);
   if (rowsError) { errorBox.textContent = rowsError.message; return; }
   window.closeHighlight(); await loadRealPosts();
+};
+
+window.updateHighlightCount = function () {
+  const files = [...document.getElementById('highlightFiles').files];
+  document.getElementById('highlightCount').textContent = files.length ? `${files.length} photo${files.length === 1 ? '' : 's'} selected` : 'No photos selected';
+  const preview = document.getElementById('highlightPreviews'); preview.innerHTML = '';
+  files.slice(0, 7).forEach((file) => { const image = document.createElement('img'); image.src = URL.createObjectURL(file); image.alt = 'Selected highlight photo'; image.style.cssText = 'width:76px;height:76px;border-radius:10px;object-fit:cover;border:1px solid #dce8e4'; preview.appendChild(image); });
 };
 
 async function loadRealPosts() {
