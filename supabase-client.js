@@ -35,6 +35,7 @@ function setupProductFeatures() {
 setupProductFeatures();
 
 function message(text) { window.alert(text); }
+function safeFileName(name) { return String(name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '-'); }
 
 async function requireUser() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -71,7 +72,7 @@ window.launchApp = async function () {
     let avatar_url = null;
     const photo = document.getElementById('profilePhoto').files[0];
     if (photo) {
-      const path = `${user.id}/profile-${crypto.randomUUID()}-${photo.name}`;
+      const path = `${user.id}/profile-${crypto.randomUUID()}-${safeFileName(photo.name)}`;
       const { error: photoError } = await supabase.storage.from('highlight-images').upload(path, photo, { contentType: photo.type });
       if (photoError) return message(photoError.message);
       avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
@@ -182,7 +183,7 @@ window.saveProfileEdits = async function () {
   const update = { full_name, university, course, bio, interests };
   const photo = document.getElementById('editPhoto').files[0];
   if (photo) {
-    const path = `${signedInUser.id}/profile-${crypto.randomUUID()}-${photo.name}`;
+    const path = `${signedInUser.id}/profile-${crypto.randomUUID()}-${safeFileName(photo.name)}`;
     const { error: photoError } = await supabase.storage.from('highlight-images').upload(path, photo, { contentType: photo.type });
     if (photoError) { errorBox.textContent = photoError.message; return; }
     update.avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
@@ -227,7 +228,7 @@ window.uploadNote = async function () {
   const file = document.getElementById('noteFile').files[0];
   const status = document.getElementById('uploadMessage');
   if (!subject || !topic || !study_year || !file) { status.textContent = 'Please add a subject, topic, year, and PDF.'; return; }
-  const filePath = `${signedInUser.id}/${crypto.randomUUID()}-${file.name}`;
+  const filePath = `${signedInUser.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
   const { error: uploadError } = await supabase.storage.from('note-files').upload(filePath, file, { contentType: file.type });
   if (uploadError) { status.textContent = uploadError.message; return; }
   const { data: url } = supabase.storage.from('note-files').getPublicUrl(filePath);
@@ -270,7 +271,7 @@ window.publishHighlight = async function () {
   if (error) { errorBox.textContent = error.message; return; }
   const imageRows = [];
   for (const [position, file] of files.entries()) {
-    const path = `${signedInUser.id}/${post.id}/${position}-${file.name}`;
+    const path = `${signedInUser.id}/${post.id}/${position}-${safeFileName(file.name)}`;
     const { error: imageError } = await supabase.storage.from('highlight-images').upload(path, file, { contentType: file.type });
     if (imageError) { errorBox.textContent = imageError.message; return; }
     const { data: url } = supabase.storage.from('highlight-images').getPublicUrl(path);
