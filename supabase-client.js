@@ -513,11 +513,19 @@ async function loadNotifications() {
   if (!signedInUser) return;
   const { data } = await supabase.from('notifications').select('*').eq('recipient_id', signedInUser.id).eq('read', false).order('created_at', { ascending: false });
   const list = document.getElementById('notificationsList'); if (!list || !data) return;
+  const senderIds = [...new Set(data.map((notice) => notice.sender_id).filter(Boolean))];
+  const { data: senders = [] } = senderIds.length
+    ? await supabase.from('student_profiles').select('id, full_name, university, avatar_url').in('id', senderIds)
+    : { data: [] };
+  const senderById = Object.fromEntries(senders.map((sender) => [sender.id, sender]));
   list.innerHTML = '';
   data.forEach((notice) => {
     const card = document.createElement('div'); card.className = 'list-card';
-    const sender = notice.type === 'connection_request' ? 'A student' : 'Bondly';
-    card.innerHTML = `<h3>${notice.type === 'connection_request' ? 'Connection request' : 'Internship match'}</h3><p><b>${escapeHtml(sender)}</b> ${escapeHtml(notice.body)}</p>`;
+    const sender = senderById[notice.sender_id];
+    const senderName = sender?.full_name || (notice.type === 'connection_request' ? 'A student' : 'Bondly');
+    const senderUniversity = sender?.university ? ` · ${escapeHtml(sender.university)}` : '';
+    card.innerHTML = `<h3>${notice.type === 'connection_request' ? 'Connection request' : 'Internship match'}</h3><p><b>${escapeHtml(senderName)}</b>${senderUniversity} ${escapeHtml(notice.body)}</p>`;
+    if (sender?.avatar_url) { const avatar = document.createElement('div'); avatar.className = 'avatar me'; avatar.style.cssText = `width:38px;height:38px;float:right;margin-top:-38px;background-image:url("${sender.avatar_url}")`; card.prepend(avatar); }
     if (notice.type === 'connection_request') {
       const accept = document.createElement('button'); accept.className = 'primary-btn'; accept.style.cssText = 'margin-top:10px;padding:9px 13px'; accept.textContent = 'Accept'; accept.onclick = () => acceptRequest(notice, accept); card.appendChild(accept);
       const reject = document.createElement('button'); reject.className = 'secondary-btn'; reject.style.cssText = 'margin:10px 0 0 8px;color:#b5493a;border-color:#b5493a'; reject.textContent = 'Reject'; reject.onclick = () => rejectRequest(notice, reject); card.appendChild(reject);
