@@ -292,8 +292,12 @@ async function openRealProfile(person) {
   const button = document.getElementById('connectButton');
   button.style.display = ''; button.textContent = 'Checking saved request…'; button.disabled = true; button.style.opacity = '.65';
   button.onclick = window.sendConnectionRequest;
-  const pairFilter = `and(requester_id.eq.${signedInUser.id},recipient_id.eq.${person.id}),and(requester_id.eq.${person.id},recipient_id.eq.${signedInUser.id})`;
-  const { data: connection, error: connectionError } = await supabase.from('connections').select('status, requester_id').or(pairFilter).maybeSingle();
+  const [sentResult, receivedResult] = await Promise.all([
+    supabase.from('connections').select('status, requester_id').eq('requester_id', signedInUser.id).eq('recipient_id', person.id).maybeSingle(),
+    supabase.from('connections').select('status, requester_id').eq('requester_id', person.id).eq('recipient_id', signedInUser.id).maybeSingle()
+  ]);
+  const connection = sentResult.data || receivedResult.data;
+  const connectionError = sentResult.error || receivedResult.error;
   if (connection?.status === 'accepted') {
     button.textContent = 'Unfriend'; button.disabled = false; button.style.opacity = '1'; button.onclick = () => unfriendPerson(person.id);
   } else if (connection?.status === 'pending') {
@@ -393,8 +397,11 @@ window.searchPeople = async function () { await loadMembers(); window.showView('
 
 window.sendConnectionRequest = async function () {
   if (!selectedMember) return message('Open a real student profile from Explore first.');
-  const pairFilter = `and(requester_id.eq.${signedInUser.id},recipient_id.eq.${selectedMember.id}),and(requester_id.eq.${selectedMember.id},recipient_id.eq.${signedInUser.id})`;
-  const { data: alreadySaved } = await supabase.from('connections').select('status, requester_id').or(pairFilter).maybeSingle();
+  const [sentResult, receivedResult] = await Promise.all([
+    supabase.from('connections').select('status, requester_id').eq('requester_id', signedInUser.id).eq('recipient_id', selectedMember.id).maybeSingle(),
+    supabase.from('connections').select('status, requester_id').eq('requester_id', selectedMember.id).eq('recipient_id', signedInUser.id).maybeSingle()
+  ]);
+  const alreadySaved = sentResult.data || receivedResult.data;
   if (alreadySaved) {
     const button = document.getElementById('connectButton');
     button.textContent = alreadySaved.status === 'accepted' ? 'Unfriend' : (alreadySaved.requester_id === signedInUser.id ? 'Request sent' : 'Request received');
