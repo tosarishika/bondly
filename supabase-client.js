@@ -10,6 +10,7 @@ let selectedMember = null;
 let activeChatId = null;
 let unreadMessageCount = 0;
 let pendingSharedPost = null;
+let attemptedRoomSeed = false;
 const localLaunch = window.launchApp;
 
 const uaeUniversities = [
@@ -235,14 +236,8 @@ async function loadRooms() {
   const { data, error } = await supabase.from('study_rooms').select('*, room_members(profile_id, student_profiles(full_name))').order('created_at', { ascending: false });
   if (error) { list.innerHTML = '<p style="color:#68817c">Rooms are ready after you run the Rooms SQL setup in Supabase.</p>'; return; }
   if (!data?.length) {
-    const samples = [
-      { name: 'CS study sprint', subject: 'Computer Science', study_level: 'Year 2', description: 'Algorithms practice, assignments, and exam revision.', members: 'Aisha · Omar · Zain' },
-      { name: 'Marketing case club', subject: 'Business & Marketing', study_level: 'Any level', description: 'Share case studies, presentation feedback, and useful notes.', members: 'Maya · Sara · Hadi' },
-      { name: 'Engineering problem solvers', subject: 'Engineering', study_level: 'Year 3', description: 'A focused room for problem sheets and group revision.', members: 'Noor · Adam · Lina' }
-    ];
-    list.innerHTML = '<p style="color:#68817c">Example public rooms — create your own to start inviting classmates.</p>';
-    samples.forEach((room) => { const card = document.createElement('div'); card.className = 'list-card'; card.innerHTML = `<span class="tag">${room.study_level}</span><h3>${room.name}</h3><p><b>${room.subject}</b><br>${room.description}</p><p style="font-size:12px;color:#68817c">Members: ${room.members}</p><button class="secondary-btn" style="margin-top:8px" disabled>Example room</button>`; list.appendChild(card); });
-    return;
+    if (attemptedRoomSeed) { list.innerHTML = '<p style="color:#68817c">No rooms yet. Create the first room.</p>'; return; }
+    attemptedRoomSeed = true; await createStarterRooms(); return loadRooms();
   }
   list.innerHTML = '';
   data.forEach((room) => {
@@ -265,6 +260,19 @@ window.createRoom = async function () {
   if (memberError) return message(memberError.message);
   await openRoom(room.id);
 };
+
+async function createStarterRooms() {
+  const starters = [
+    { name: 'CS study sprint', subject: 'Computer Science', study_level: 'Year 2', description: 'Algorithms practice, assignments, and exam revision.' },
+    { name: 'Marketing case club', subject: 'Business & Marketing', study_level: 'Any level', description: 'Share case studies, presentation feedback, and useful notes.' },
+    { name: 'Engineering problem solvers', subject: 'Engineering', study_level: 'Year 3', description: 'A focused room for problem sheets and group revision.' }
+  ];
+  for (const room of starters) {
+    const { data: created, error } = await supabase.from('study_rooms').insert({ ...room, owner_id: signedInUser.id, invite_code: crypto.randomUUID().replaceAll('-', '').slice(0, 10) }).select().single();
+    if (error || !created) continue;
+    await supabase.from('room_members').insert({ room_id: created.id, profile_id: signedInUser.id });
+  }
+}
 
 async function joinStudyRoom(roomId) {
   const { error } = await supabase.from('room_members').insert({ room_id: roomId, profile_id: signedInUser.id });
