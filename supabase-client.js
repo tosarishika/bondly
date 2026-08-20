@@ -32,6 +32,9 @@ function setupProductFeatures() {
   const accommodations = document.createElement('div'); accommodations.className = 'view'; accommodations.id = 'accommodations'; accommodations.innerHTML = '<div class="view-title"><div><h2>Accommodations</h2><p>Find roommates, rooms, and student-friendly housing.</p></div><button class="secondary-btn" onclick="document.getElementById(\'accommodationModal\').classList.add(\'show\')">+ Post listing</button></div><div id="accommodationsList"></div>'; document.querySelector('.content').appendChild(accommodations);
   const accommodationModal = document.createElement('div'); accommodationModal.className = 'highlight-modal'; accommodationModal.id = 'accommodationModal'; accommodationModal.innerHTML = '<div class="dialog"><h2>Post accommodation</h2><p>Share a room, flat, roommate request, or housing lead.</p><select id="accommodationType" class="field"><option value="">What are you posting?</option><option>Room available</option><option>Looking for a roommate</option><option>Flat / studio available</option><option>Housing advice / lead</option></select><input id="accommodationTitle" class="field" placeholder="Title — e.g. Room near University of Dubai"><input id="accommodationArea" class="field" placeholder="Area / neighbourhood"><input id="accommodationPrice" class="field" placeholder="Monthly budget (optional)"><textarea id="accommodationDescription" class="field" placeholder="Add useful details, availability, and preferences"></textarea><p id="accommodationError" class="highlight-status"></p><button class="primary-btn wide" onclick="publishAccommodation()">Post listing</button><div class="switch"><a onclick="document.getElementById(\'accommodationModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(accommodationModal);
   const shareModal = document.createElement('div'); shareModal.className = 'highlight-modal'; shareModal.id = 'sharePostModal'; shareModal.innerHTML = '<div class="dialog"><h2>Share highlight</h2><p>Choose a student to send this post to.</p><div id="sharePeopleList"></div><div class="switch"><a onclick="document.getElementById(\'sharePostModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(shareModal);
+  const helpBubble = document.createElement('button'); helpBubble.id = 'helpBubble'; helpBubble.type = 'button'; helpBubble.title = 'Bondly Help'; helpBubble.textContent = '?'; helpBubble.onclick = () => { window.showView('help'); setTimeout(() => document.getElementById('helpChatInput')?.focus(), 50); }; document.body.appendChild(helpBubble);
+  const helpView = document.getElementById('help');
+  helpView.querySelector('#botAnswer').insertAdjacentHTML('afterend', '<div id="helpChatLog" class="help-chat-log"></div><div class="help-chat-compose"><input id="helpChatInput" placeholder="Ask Bondly Help anything…"><button onclick="sendHelpMessage()">Send</button></div>');
   const postModal = document.createElement('div'); postModal.className = 'highlight-modal'; postModal.id = 'postModal';
   postModal.innerHTML = '<div class="dialog" style="max-width:700px;padding:0;overflow:hidden"><button onclick="closePostModal()" aria-label="Close post" style="position:absolute;right:22px;top:18px;z-index:2;border-radius:50%;background:#fff;width:34px;height:34px;font-size:20px">×</button><div id="openedPost"></div></div>';
   postModal.onclick = (event) => { if (event.target === postModal) window.closePostModal(); };
@@ -54,6 +57,24 @@ setupProductFeatures();
 
 function message(text) { window.alert(text); }
 function safeFileName(name) { return String(name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '-'); }
+
+window.sendHelpMessage = function () {
+  const input = document.getElementById('helpChatInput'); const question = input.value.trim();
+  if (!question) return;
+  const log = document.getElementById('helpChatLog');
+  const mine = document.createElement('div'); mine.className = 'help-chat-message mine'; mine.textContent = question; log.appendChild(mine);
+  const q = question.toLowerCase();
+  let reply = 'I can help you find students, send a message, share a highlight, upload notes, look for internships, or use Accommodations.';
+  if (q.includes('message') || q.includes('chat') || q.includes('text')) reply = 'Open a student profile and press Message. You can chat even before connecting, and attach photos or PDFs with the paperclip.';
+  else if (q.includes('intern')) reply = 'Open Opportunities to browse posts, or use Post internship on Home to share one. Matching interests receive a notification.';
+  else if (q.includes('note') || q.includes('pdf')) reply = 'Open Notes, choose Upload notes, then add the subject, topic, year, and PDF. You can open other students’ uploads there too.';
+  else if (q.includes('accommodation') || q.includes('room') || q.includes('flat') || q.includes('roommate')) reply = 'Open Accommodations to find rooms and roommates. Use Post listing to share a housing lead or room.';
+  else if (q.includes('highlight') || q.includes('post')) reply = 'On Home, choose Create highlight and add 1–7 photos. You can then like, comment, share, or delete your own highlight.';
+  else if (q.includes('connect') || q.includes('friend')) reply = 'Open someone’s profile and choose Send connection request. Their answer appears in Notifications; accepted connections are saved.';
+  const bot = document.createElement('div'); bot.className = 'help-chat-message'; bot.textContent = reply; log.appendChild(bot);
+  input.value = ''; log.scrollTop = log.scrollHeight;
+};
+document.addEventListener('keydown', (event) => { if (event.key === 'Enter' && document.activeElement?.id === 'helpChatInput') window.sendHelpMessage(); });
 
 async function requireUser() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -274,7 +295,9 @@ async function loadProfilePosts(profileId) {
     const card = document.createElement('div'); card.className = 'list-card'; card.style.cursor = 'pointer'; card.title = 'Open highlight'; card.onclick = () => openHighlightPost(post.id);
     const images = document.createElement('div'); images.style.cssText = 'display:flex;gap:6px;overflow:hidden;margin-bottom:10px';
     post.post_images.sort((a,b) => a.position-b.position).forEach((image) => { const photo = document.createElement('img'); photo.src = image.image_url; photo.alt = 'Highlight photo'; photo.style.cssText = 'width:78px;height:78px;border-radius:8px;object-fit:cover'; images.appendChild(photo); });
-    card.appendChild(images); card.innerHTML += `<p>${escapeHtml(post.caption || 'Weekly highlight')}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`; area.appendChild(card);
+    card.appendChild(images); card.innerHTML += `<p>${escapeHtml(post.caption || 'Weekly highlight')}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`;
+    if (profileId === signedInUser.id) { const remove = document.createElement('button'); remove.className = 'secondary-btn'; remove.style.cssText = 'margin-top:10px;color:#b5493a;border-color:#b5493a'; remove.textContent = 'Delete post'; remove.onclick = (event) => { event.stopPropagation(); deleteHighlight(post.id); }; card.appendChild(remove); }
+    area.appendChild(card);
   });
   await loadProfileNotes(profileId, area);
 }
@@ -414,8 +437,18 @@ async function loadRealPosts() {
     composer.querySelector('input').onkeydown = (event) => { if (event.key === 'Enter') addPostComment(post.id, event.currentTarget.value); };
     body.querySelector('.comment-toggle').onclick = () => { commentsArea.classList.toggle('show'); composer.classList.toggle('show'); if (commentsArea.classList.contains('show')) composer.querySelector('input').focus(); };
     body.querySelector('.share-toggle').onclick = () => showSharePost(post);
+    if (post.author_id === signedInUser.id) { const remove = document.createElement('button'); remove.className = 'post-action'; remove.title = 'Delete your highlight'; remove.style.color = '#b5493a'; remove.textContent = '⌫'; remove.onclick = () => deleteHighlight(post.id); body.querySelector('.post-actions').appendChild(remove); }
     body.append(commentsArea, composer); element.appendChild(body); container.appendChild(element);
   });
+}
+
+async function deleteHighlight(postId) {
+  if (!window.confirm('Delete this highlight? This cannot be undone.')) return;
+  const { error } = await supabase.from('posts').delete().eq('id', postId).eq('author_id', signedInUser.id);
+  if (error) return message(error.message);
+  window.closePostModal?.();
+  await loadRealPosts();
+  if (selectedMember?.id === signedInUser.id || !selectedMember) await loadProfilePosts(signedInUser.id);
 }
 
 async function showSharePost(post) {
