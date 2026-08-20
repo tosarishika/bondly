@@ -23,6 +23,7 @@ document.querySelector('.my-card').onclick = () => openMyProfile();
 
 function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
+  const globalSearch = document.getElementById('globalSearch'); if (globalSearch) globalSearch.placeholder = 'Search students or universities';
   const messagesNav = document.querySelector('.nav-item[data-view="messages"]');
   messagesNav.insertAdjacentHTML('beforeend', '<b id="messageCount" class="nav-badge" style="display:none">0</b>');
   document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="showSelectedChatFile()"><button id="chatAttachButton" type="button" title="Attach a photo or PDF" onclick="document.getElementById(\'chatFile\').click()" style="background:transparent;color:#176b57;font-size:21px;padding:2px 5px">📎</button><span id="chatFileName" style="font-size:11px;color:#68817c;max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>');
@@ -447,6 +448,7 @@ async function loadRealPosts() {
     const photos = document.createElement('div'); photos.className = 'post-images';
     post.post_images.sort((a,b) => a.position-b.position).forEach((image) => { const tile = document.createElement('div'); tile.style.backgroundImage = `url("${image.image_url}")`; photos.appendChild(tile); });
     element.innerHTML = `<div class="post-head" style="cursor:pointer"><div class="avatar me"></div><div><h4>${escapeHtml(post.student_profiles?.full_name || 'Student')} <small>· ${escapeHtml(post.student_profiles?.university || '')}</small></h4><small>Highlights of the Week</small></div></div>`;
+    const postAvatar = element.querySelector('.avatar'); postAvatar.style.backgroundImage = post.student_profiles?.avatar_url ? `url("${post.student_profiles.avatar_url}")` : 'none';
     if (post.student_profiles?.id !== signedInUser.id) element.querySelector('.post-head').onclick = () => openRealProfile(post.student_profiles);
     element.appendChild(photos);
     photos.style.cursor = 'pointer';
