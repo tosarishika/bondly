@@ -378,7 +378,7 @@ window.updateHighlightCount = function () {
 };
 
 async function loadRealPosts() {
-  const { data } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, course, interests, bio, avatar_url), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
+  const { data } = await supabase.from('posts').select('*, student_profiles!posts_author_id_fkey(id, full_name, university, course, interests, bio, avatar_url), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
   if (!data) return;
   const { data: myConnections = [] } = await supabase.from('connections').select('requester_id, recipient_id').eq('status', 'accepted').or(`requester_id.eq.${signedInUser.id},recipient_id.eq.${signedInUser.id}`);
   const friendIds = new Set(myConnections.map((link) => link.requester_id === signedInUser.id ? link.recipient_id : link.requester_id));
@@ -445,7 +445,7 @@ async function sharePostToPerson(person) {
 window.closePostModal = function () { document.getElementById('postModal').classList.remove('show'); };
 
 async function openHighlightPost(postId) {
-  const { data: post, error } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, avatar_url), post_images(*)').eq('id', postId).single();
+  const { data: post, error } = await supabase.from('posts').select('*, student_profiles!posts_author_id_fkey(id, full_name, university, avatar_url), post_images(*)').eq('id', postId).single();
   if (error) return message(error.message);
   const [{ data: likesData, error: likesError }, { data: commentsData, error: commentsError }] = await Promise.all([
     supabase.from('post_likes').select('post_id, user_id').eq('post_id', postId),
