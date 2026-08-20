@@ -35,6 +35,9 @@ function setupProductFeatures() {
   const helpBubble = document.createElement('button'); helpBubble.id = 'helpBubble'; helpBubble.type = 'button'; helpBubble.title = 'Bondly Help'; helpBubble.textContent = '?'; helpBubble.onclick = () => { window.showView('help'); setTimeout(() => document.getElementById('helpChatInput')?.focus(), 50); }; document.body.appendChild(helpBubble);
   const helpView = document.getElementById('help');
   helpView.querySelector('#botAnswer').insertAdjacentHTML('afterend', '<div id="helpChatLog" class="help-chat-log"></div><div class="help-chat-compose"><input id="helpChatInput" placeholder="Ask Bondly Help anything…"><button onclick="sendHelpMessage()">Send</button></div>');
+  document.querySelector('.chat-head').insertAdjacentHTML('afterend', '<div class="chat-theme-picker" title="Choose your chat background"><span>Chat colour</span><button class="theme-sage" onclick="setChatTheme(\'sage\')"></button><button class="theme-peach" onclick="setChatTheme(\'peach\')"></button><button class="theme-lilac" onclick="setChatTheme(\'lilac\')"></button><button class="theme-sky" onclick="setChatTheme(\'sky\')"></button><button class="theme-butter" onclick="setChatTheme(\'butter\')"></button></div>');
+  window.setChatTheme = (theme) => { document.querySelector('.chat-main').dataset.theme = theme; localStorage.setItem('bondly-chat-theme', theme); };
+  window.setChatTheme(localStorage.getItem('bondly-chat-theme') || 'sage');
   const postModal = document.createElement('div'); postModal.className = 'highlight-modal'; postModal.id = 'postModal';
   postModal.innerHTML = '<div class="dialog" style="max-width:700px;padding:0;overflow:hidden"><button onclick="closePostModal()" aria-label="Close post" style="position:absolute;right:22px;top:18px;z-index:2;border-radius:50%;background:#fff;width:34px;height:34px;font-size:20px">×</button><div id="openedPost"></div></div>';
   postModal.onclick = (event) => { if (event.target === postModal) window.closePostModal(); };
@@ -129,7 +132,7 @@ window.launchApp = async function () {
   }
   localLaunch();
   const { data: currentProfile } = await supabase.from('student_profiles').select('avatar_url').eq('id', user.id).single();
-  if (currentProfile?.avatar_url) document.querySelectorAll('.avatar.me').forEach((avatar) => { avatar.style.backgroundImage = `url("${currentProfile.avatar_url}")`; });
+  document.querySelectorAll('.avatar.me').forEach((avatar) => { avatar.style.backgroundImage = currentProfile?.avatar_url ? `url("${currentProfile.avatar_url}")` : 'none'; });
   await loadMembers();
   await loadChats();
   await loadRealPosts();
@@ -141,14 +144,21 @@ window.launchApp = async function () {
 async function loadAccommodations() {
   const list = document.getElementById('accommodationsList'); if (!list) return;
   const { data, error } = await supabase.from('accommodations').select('*, student_profiles(id, full_name, university, avatar_url)').order('created_at', { ascending: false });
-  if (error) { list.innerHTML = '<p style="color:#68817c">No accommodation listings yet.</p>'; return; }
+  const sampleListings = [
+    { listing_type: 'Room available', title: 'Furnished room near University City', area: 'University City, Sharjah', price: 'AED 2,300 / month', description: 'Female student preferred. Available from September, bills included.' },
+    { listing_type: 'Looking for a roommate', title: 'Looking for a roommate in Al Nahda', area: 'Al Nahda, Dubai', price: 'Around AED 2,000 / month', description: 'Easy commute to university. Looking for a tidy student to share a two-bedroom flat.' },
+    { listing_type: 'Flat / studio available', title: 'Student-friendly studio in Academic City', area: 'Dubai Silicon Oasis', price: 'AED 3,500 / month', description: 'Near campus shuttle routes. Message the listing owner for availability.' }
+  ];
+  if (error || !data?.length) { list.innerHTML = ''; sampleListings.forEach((item) => renderAccommodation(item, list, true)); return; }
   list.innerHTML = '';
-  if (!data?.length) { list.innerHTML = '<p style="color:#68817c">No listings yet. Be the first to share one.</p>'; return; }
-  data.forEach((item) => {
+  data.forEach((item) => renderAccommodation(item, list, false));
+}
+
+function renderAccommodation(item, list, sample) {
     const card = document.createElement('div'); card.className = 'list-card';
-    card.innerHTML = `<span class="tag">${escapeHtml(item.listing_type)}</span><h3>${escapeHtml(item.title)}</h3><p><b>${escapeHtml(item.area || 'Dubai')}</b>${item.price ? ` · ${escapeHtml(item.price)}` : ''}<br>${escapeHtml(item.description)}<br><br>Posted by <b>${escapeHtml(item.student_profiles?.full_name || 'Student')}</b> · ${escapeHtml(item.student_profiles?.university || '')}</p>`;
-    const contact = document.createElement('button'); contact.className = 'secondary-btn'; contact.style.marginTop = '12px'; contact.textContent = 'Message'; contact.onclick = () => openDirectChat(item.student_profiles); card.appendChild(contact); list.appendChild(card);
-  });
+    card.innerHTML = `<span class="tag">${escapeHtml(item.listing_type)}</span><h3>${escapeHtml(item.title)}</h3><p><b>${escapeHtml(item.area || 'Dubai')}</b>${item.price ? ` · ${escapeHtml(item.price)}` : ''}<br>${escapeHtml(item.description)}<br><br>${sample ? '<small style="color:#68817c">Sample listing</small>' : `Posted by <b>${escapeHtml(item.student_profiles?.full_name || 'Student')}</b> · ${escapeHtml(item.student_profiles?.university || '')}`}</p>`;
+    if (!sample) { const contact = document.createElement('button'); contact.className = 'secondary-btn'; contact.style.marginTop = '12px'; contact.textContent = 'Message'; contact.onclick = () => openDirectChat(item.student_profiles); card.appendChild(contact); }
+    list.appendChild(card);
 }
 
 window.publishAccommodation = async function () {
@@ -190,12 +200,12 @@ async function loadChats() {
   list.innerHTML = '';
   const shownPeople = new Set();
   for (const membership of memberships) {
-    const { data: members } = await supabase.from('chat_members').select('profile_id, student_profiles(id, full_name, university)').eq('chat_id', membership.chat_id);
+    const { data: members } = await supabase.from('chat_members').select('profile_id, student_profiles(id, full_name, university, avatar_url)').eq('chat_id', membership.chat_id);
     const other = members?.map((member) => member.student_profiles).find((person) => person?.id !== signedInUser.id);
     if (!other || shownPeople.has(other.id)) continue;
     shownPeople.add(other.id);
     const row = document.createElement('div'); row.className = 'chat-person';
-    row.innerHTML = `<div class="avatar a1"></div><div><strong>${escapeHtml(other.full_name)}</strong><small>${escapeHtml(other.university)}</small></div>`;
+    row.innerHTML = `<div class="avatar" style="width:38px;height:38px;background-image:${other.avatar_url ? `url('${escapeHtml(other.avatar_url)}')` : 'none'}"></div><div><strong>${escapeHtml(other.full_name)}</strong><small>${escapeHtml(other.university)}</small></div>`;
     row.onclick = () => resumeChat(membership.chat_id, other); list.appendChild(row);
   }
 }
@@ -216,7 +226,7 @@ async function openRealProfile(person) {
   document.getElementById('profileTagOne').textContent = person.interests?.[0] || 'Student';
   document.getElementById('profileTagTwo').textContent = person.interests?.[1] || 'Bondly';
   const avatar = document.getElementById('profileAvatar');
-  avatar.style.backgroundImage = person.avatar_url ? `url("${person.avatar_url}")` : '';
+  avatar.style.backgroundImage = person.avatar_url ? `url("${person.avatar_url}")` : 'none';
   const button = document.getElementById('connectButton');
   button.style.display = ''; button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1';
   button.onclick = window.sendConnectionRequest;
@@ -244,7 +254,7 @@ async function openMyProfile() {
   document.getElementById('profileBio').textContent = mine.bio || 'Add a short bio to help students know you.';
   document.getElementById('profileTagOne').textContent = mine.interests?.[0] || 'Student';
   document.getElementById('profileTagTwo').textContent = mine.interests?.[1] || 'Bondly';
-  const avatar = document.getElementById('profileAvatar'); if (mine.avatar_url) avatar.style.backgroundImage = `url("${mine.avatar_url}")`;
+  const avatar = document.getElementById('profileAvatar'); avatar.style.backgroundImage = mine.avatar_url ? `url("${mine.avatar_url}")` : 'none';
   const connect = document.getElementById('connectButton'); connect.style.display = 'none';
   const edit = document.querySelector('#profile .primary-btn'); edit.textContent = 'Edit profile'; edit.onclick = editMyProfile;
   window.showView('profile'); loadProfilePosts(mine.id);
