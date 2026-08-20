@@ -51,12 +51,14 @@ function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
   const globalSearch = document.getElementById('globalSearch'); if (globalSearch) globalSearch.placeholder = 'Search students or universities';
   document.querySelector('.chat-list').innerHTML = '<p class="empty-chat-list">No chats yet.<br><small>Open a student profile and press Message to start one.</small></p>';
+  document.querySelector('.message-layout').classList.remove('chat-open');
   document.getElementById('chatHead').textContent = 'Choose a conversation';
   document.getElementById('messageList').innerHTML = '<p class="empty-chat-message">Choose someone from your chat list.</p>';
   topbar.insertAdjacentHTML('beforeend', '<div id="searchQuickActions" class="search-quick-actions"><button onclick="syncContacts()">⌁ Synchronize contacts</button><button onclick="inviteToBondly()">↗ Invite someone</button></div>');
   globalSearch?.addEventListener('focus', () => document.getElementById('searchQuickActions').classList.add('show'));
   globalSearch?.addEventListener('blur', () => setTimeout(() => document.getElementById('searchQuickActions')?.classList.remove('show'), 180));
   const messagesNav = document.querySelector('.nav-item[data-view="messages"]');
+  messagesNav.addEventListener('click', () => document.querySelector('.message-layout').classList.remove('chat-open'));
   messagesNav.insertAdjacentHTML('beforeend', '<b id="messageCount" class="nav-badge" style="display:none">0</b>');
   document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="showSelectedChatFile()"><button id="chatAttachButton" type="button" title="Attach a photo or PDF" onclick="document.getElementById(\'chatFile\').click()" style="background:transparent;color:#176b57;font-size:21px;padding:2px 5px">📎</button><span id="chatFileName" style="font-size:11px;color:#68817c;max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
@@ -277,7 +279,7 @@ async function loadChats() {
 }
 
 async function resumeChat(chatId, person) {
-  activeChatId = chatId; selectedMember = person;
+  activeChatId = chatId; selectedMember = person; document.querySelector('.message-layout').classList.add('chat-open');
   setChatHeader(person);
   document.querySelectorAll('.chat-person').forEach((row) => row.classList.remove('active'));
   unreadMessageCount = 0; updateMessageBadge();
@@ -616,7 +618,7 @@ async function addPostComment(postId, body) {
 async function openDirectChat(person) {
   const { data: chatId, error } = await supabase.rpc('create_bondly_direct_chat', { other_user_id: person.id });
   if (error) return message(error.message);
-  activeChatId = chatId;
+  activeChatId = chatId; document.querySelector('.message-layout').classList.add('chat-open');
   unreadMessageCount = 0; updateMessageBadge();
   setChatHeader(person);
   document.getElementById('messageList').innerHTML = '';
@@ -679,8 +681,10 @@ window.showSelectedChatFile = function () {
 };
 
 function setChatHeader(person) {
-  document.getElementById('chatHead').innerHTML = `${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small><button onclick="deleteActiveChat()" style="float:right;border:0;background:transparent;color:#b5493a;font-weight:700;cursor:pointer">Delete chat</button>`;
+  document.getElementById('chatHead').innerHTML = `<button class="mobile-chat-back" onclick="closeMobileChat()">← Chats</button>${escapeHtml(person.full_name)} <small style="color:#6b827b;font-weight:400"> · ${escapeHtml(person.university)}</small><button onclick="deleteActiveChat()" style="float:right;border:0;background:transparent;color:#b5493a;font-weight:700;cursor:pointer">Delete chat</button>`;
 }
+
+window.closeMobileChat = function () { document.querySelector('.message-layout').classList.remove('chat-open'); activeChatId = null; };
 
 window.deleteActiveChat = async function () {
   if (!activeChatId || !window.confirm('Delete this chat and all its messages? This cannot be undone.')) return;
