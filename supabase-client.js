@@ -265,13 +265,13 @@ window.saveProfileEdits = async function () {
 };
 
 async function loadProfilePosts(profileId) {
-  const { data } = await supabase.from('posts').select('caption, hashtags, post_images(image_url, position)').eq('author_id', profileId).order('created_at', { ascending: false });
+  const { data } = await supabase.from('posts').select('id, caption, hashtags, post_images(image_url, position)').eq('author_id', profileId).eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
   let area = document.getElementById('profilePosts');
   if (!area) { area = document.createElement('div'); area.id = 'profilePosts'; area.style.padding = '0 25px 25px'; document.querySelector('.profile-info').appendChild(area); }
   area.innerHTML = '<h3 style="margin:14px 0">Highlights</h3>';
   if (!data?.length) area.innerHTML += '<p style="color:#68817c;font-size:14px">No highlights shared yet.</p>';
   data?.forEach((post) => {
-    const card = document.createElement('div'); card.className = 'list-card';
+    const card = document.createElement('div'); card.className = 'list-card'; card.style.cursor = 'pointer'; card.title = 'Open highlight'; card.onclick = () => openHighlightPost(post.id);
     const images = document.createElement('div'); images.style.cssText = 'display:flex;gap:6px;overflow:hidden;margin-bottom:10px';
     post.post_images.sort((a,b) => a.position-b.position).forEach((image) => { const photo = document.createElement('img'); photo.src = image.image_url; photo.alt = 'Highlight photo'; photo.style.cssText = 'width:78px;height:78px;border-radius:8px;object-fit:cover'; images.appendChild(photo); });
     card.appendChild(images); card.innerHTML += `<p>${escapeHtml(post.caption || 'Weekly highlight')}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`; area.appendChild(card);
