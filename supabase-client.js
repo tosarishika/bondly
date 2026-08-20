@@ -16,7 +16,7 @@ function addProfileSetupFields() {
   const card = document.querySelector('.onboard-card');
   if (document.getElementById('profileFullName')) return;
   const universityLabel = [...card.querySelectorAll('label')].find((label) => label.textContent === 'University');
-  universityLabel.insertAdjacentHTML('beforebegin', '<label>Your name</label><input id="profileFullName" class="field" placeholder="Your full name"><label>Profile picture</label><input id="profilePhoto" class="field" type="file" accept="image/*"><label>Short bio</label><textarea id="profileBioInput" class="field" placeholder="A little about you, your interests, or what you are looking for"></textarea>');
+  universityLabel.insertAdjacentHTML('beforebegin', '<label>Your name</label><input id="profileFullName" class="field" placeholder="Your full name"><label>Profile picture</label><input id="profilePhoto" class="field" type="file" accept="image/*"><label>Contact number <small>(optional, for finding contacts)</small></label><input id="profilePhone" class="field" type="tel" placeholder="e.g. +971 50 123 4567"><label>Short bio</label><textarea id="profileBioInput" class="field" placeholder="A little about you, your interests, or what you are looking for"></textarea>');
 }
 addProfileSetupFields();
 document.querySelector('.my-card').onclick = () => openMyProfile();
@@ -24,12 +24,16 @@ document.querySelector('.my-card').onclick = () => openMyProfile();
 function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
   const globalSearch = document.getElementById('globalSearch'); if (globalSearch) globalSearch.placeholder = 'Search students or universities';
+  topbar.insertAdjacentHTML('beforeend', '<div id="searchQuickActions" class="search-quick-actions"><button onclick="syncContacts()">⌁ Synchronize contacts</button><button onclick="inviteToBondly()">↗ Invite someone</button></div>');
+  globalSearch?.addEventListener('focus', () => document.getElementById('searchQuickActions').classList.add('show'));
+  globalSearch?.addEventListener('blur', () => setTimeout(() => document.getElementById('searchQuickActions')?.classList.remove('show'), 180));
   const messagesNav = document.querySelector('.nav-item[data-view="messages"]');
   messagesNav.insertAdjacentHTML('beforeend', '<b id="messageCount" class="nav-badge" style="display:none">0</b>');
   document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="showSelectedChatFile()"><button id="chatAttachButton" type="button" title="Attach a photo or PDF" onclick="document.getElementById(\'chatFile\').click()" style="background:transparent;color:#176b57;font-size:21px;padding:2px 5px">📎</button><span id="chatFileName" style="font-size:11px;color:#68817c;max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
   const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
   const accommodationNav = document.createElement('div'); accommodationNav.className = 'nav-item'; accommodationNav.dataset.view = 'accommodations'; accommodationNav.innerHTML = '<span class="icon">⌂</span><span>Accommodations</span>'; accommodationNav.onclick = () => window.showView('accommodations'); document.querySelector('.nav-item[data-view="opportunities"]').insertAdjacentElement('afterend', accommodationNav);
+  const profileNav = document.createElement('div'); profileNav.className = 'nav-item'; profileNav.dataset.view = 'profile'; profileNav.innerHTML = '<span class="icon">◉</span><span>Profile</span>'; profileNav.onclick = () => openMyProfile(); document.querySelector('.nav-item[data-view="help"]').insertAdjacentElement('beforebegin', profileNav);
   const accommodations = document.createElement('div'); accommodations.className = 'view'; accommodations.id = 'accommodations'; accommodations.innerHTML = '<div class="view-title"><div><h2>Accommodations</h2><p>Find roommates, rooms, and student-friendly housing.</p></div><button class="secondary-btn" onclick="document.getElementById(\'accommodationModal\').classList.add(\'show\')">+ Post listing</button></div><div id="accommodationsList"></div>'; document.querySelector('.content').appendChild(accommodations);
   const accommodationModal = document.createElement('div'); accommodationModal.className = 'highlight-modal'; accommodationModal.id = 'accommodationModal'; accommodationModal.innerHTML = '<div class="dialog"><h2>Post accommodation</h2><p>Share a room, flat, roommate request, or housing lead.</p><select id="accommodationType" class="field"><option value="">What are you posting?</option><option>Room available</option><option>Looking for a roommate</option><option>Flat / studio available</option><option>Housing advice / lead</option></select><input id="accommodationTitle" class="field" placeholder="Title — e.g. Room near University of Dubai"><input id="accommodationArea" class="field" placeholder="Area / neighbourhood"><input id="accommodationPrice" class="field" placeholder="Monthly budget (optional)"><textarea id="accommodationDescription" class="field" placeholder="Add useful details, availability, and preferences"></textarea><p id="accommodationError" class="highlight-status"></p><button class="primary-btn wide" onclick="publishAccommodation()">Post listing</button><div class="switch"><a onclick="document.getElementById(\'accommodationModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(accommodationModal);
   const shareModal = document.createElement('div'); shareModal.className = 'highlight-modal'; shareModal.id = 'sharePostModal'; shareModal.innerHTML = '<div class="dialog"><h2>Share highlight</h2><p>Choose a student to send this post to.</p><div id="sharePeopleList"></div><div class="switch"><a onclick="document.getElementById(\'sharePostModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(shareModal);
@@ -49,7 +53,7 @@ function setupProductFeatures() {
   document.body.appendChild(modal);
 
   const editModal = document.createElement('div'); editModal.className = 'highlight-modal'; editModal.id = 'editProfileModal';
-  editModal.innerHTML = '<div class="dialog"><h2>Edit your profile</h2><label>Name</label><input id="editName" class="field"><label>Profile picture</label><input id="editPhoto" class="field" type="file" accept="image/*"><label>University</label><select id="editUniversity" class="field"><option>University of Dubai</option><option>American University of Sharjah</option><option>Heriot-Watt University Dubai</option><option>University of Birmingham Dubai</option><option>Zayed University</option></select><label>Course and year</label><input id="editCourse" class="field" placeholder="e.g. Business Management, Year 2"><label>Bio</label><textarea id="editBio" class="field"></textarea><label>Interests</label><input id="editInterests" class="field" placeholder="Marketing, Finance, Design"><p id="editProfileError" class="highlight-status"></p><button class="primary-btn wide" onclick="saveProfileEdits()">Save changes</button><div class="switch"><a onclick="document.getElementById(\'editProfileModal\').classList.remove(\'show\')">Cancel</a></div></div>';
+  editModal.innerHTML = '<div class="dialog"><h2>Edit your profile</h2><label>Name</label><input id="editName" class="field"><label>Profile picture</label><input id="editPhoto" class="field" type="file" accept="image/*"><label>Contact number <small>(optional, for contact sync)</small></label><input id="editPhone" class="field" type="tel"><label>University</label><select id="editUniversity" class="field"><option>University of Dubai</option><option>American University of Sharjah</option><option>Heriot-Watt University Dubai</option><option>University of Birmingham Dubai</option><option>Zayed University</option></select><label>Course and year</label><input id="editCourse" class="field" placeholder="e.g. Business Management, Year 2"><label>Bio</label><textarea id="editBio" class="field"></textarea><label>Interests</label><input id="editInterests" class="field" placeholder="Marketing, Finance, Design"><p id="editProfileError" class="highlight-status"></p><button class="primary-btn wide" onclick="saveProfileEdits()">Save changes</button><div class="switch"><a onclick="document.getElementById(\'editProfileModal\').classList.remove(\'show\')">Cancel</a></div></div>';
   document.body.appendChild(editModal);
 
   const highlightModal = document.getElementById('highlightModal');
@@ -121,6 +125,7 @@ window.launchApp = async function () {
       avatar_url = supabase.storage.from('highlight-images').getPublicUrl(path).data.publicUrl;
     }
     const bio = document.getElementById('profileBioInput').value.trim();
+    const contact_number = document.getElementById('profilePhone').value.trim();
     const { error } = await supabase.rpc('create_bondly_profile', {
       profile_name: name,
       profile_university: university,
@@ -130,6 +135,7 @@ window.launchApp = async function () {
       profile_avatar_url: avatar_url
     });
     if (error) return message(`Could not save your profile: ${error.message}`);
+    if (contact_number) await supabase.from('student_profiles').update({ contact_number }).eq('id', user.id);
   }
   localLaunch();
   const { data: currentProfile } = await supabase.from('student_profiles').select('avatar_url').eq('id', user.id).single();
@@ -198,17 +204,28 @@ async function loadMembers() {
 window.syncContacts = async function () {
   const button = document.getElementById('syncContactsButton'); const status = document.getElementById('contactSyncStatus');
   if (!navigator.contacts?.select) {
-    status.textContent = 'Contact permission is available on supported mobile browsers. You can still explore students here.';
+    if (status) status.textContent = 'Contact permission is available on supported mobile browsers. You can still explore students here.';
     return;
   }
   try {
-    button.disabled = true; button.textContent = 'Syncing…';
-    const contacts = await navigator.contacts.select(['name', 'email'], { multiple: true });
+    if (button) { button.disabled = true; button.textContent = 'Syncing…'; }
+    const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: true });
     localStorage.setItem('bondly-contact-sync-count', String(contacts.length));
-    status.textContent = contacts.length ? `${contacts.length} contact${contacts.length === 1 ? '' : 's'} checked. Students you know appear in Explore when they join Bondly.` : 'No contacts selected.';
+    const normalize = (number) => String(number || '').replace(/\D/g, '').slice(-9);
+    const contactNumbers = new Set(contacts.flatMap((contact) => contact.tel || []).map(normalize).filter(Boolean));
+    const { data: profilesData } = await supabase.from('student_profiles').select('full_name, contact_number').not('contact_number', 'is', null);
+    const matches = (profilesData || []).filter((profile) => contactNumbers.has(normalize(profile.contact_number)));
+    const text = matches.length ? `Found ${matches.length} student${matches.length === 1 ? '' : 's'} you may know: ${matches.map((profile) => profile.full_name).join(', ')}.` : (contacts.length ? `${contacts.length} contacts checked. No Bondly matches yet.` : 'No contacts selected.');
+    if (status) status.textContent = text; else message(text);
   } catch (_error) {
-    status.textContent = 'Contact sync was cancelled.';
-  } finally { button.disabled = false; button.textContent = '⌁ Sync contacts'; }
+    if (status) status.textContent = 'Contact sync was cancelled.';
+  } finally { if (button) { button.disabled = false; button.textContent = '⌁ Sync contacts'; } }
+};
+
+window.inviteToBondly = async function () {
+  const link = window.location.origin;
+  if (navigator.share) { try { await navigator.share({ title: 'Join me on Bondly', text: 'Join my UAE university circle on Bondly.', url: link }); return; } catch (_error) { /* fall back to copy prompt */ } }
+  window.prompt('Copy this Bondly invite link and send it to a friend:', link);
 };
 
 async function loadChats() {
@@ -281,6 +298,7 @@ async function openMyProfile() {
 async function editMyProfile() {
   const { data: mine } = await supabase.from('student_profiles').select('*').eq('id', signedInUser.id).single();
   document.getElementById('editName').value = mine.full_name || '';
+  document.getElementById('editPhone').value = mine.contact_number || '';
   document.getElementById('editUniversity').value = mine.university || 'University of Dubai';
   document.getElementById('editCourse').value = mine.course || '';
   document.getElementById('editBio').value = mine.bio || '';
@@ -294,9 +312,10 @@ window.saveProfileEdits = async function () {
   const course = document.getElementById('editCourse').value.trim();
   const bio = document.getElementById('editBio').value.trim();
   const interests = document.getElementById('editInterests').value.split(',').map((item) => item.trim()).filter(Boolean);
+  const contact_number = document.getElementById('editPhone').value.trim();
   const errorBox = document.getElementById('editProfileError');
   if (!full_name) { errorBox.textContent = 'Please add your name.'; return; }
-  const update = { full_name, university, course, bio, interests };
+  const update = { full_name, university, course, bio, interests, contact_number };
   const photo = document.getElementById('editPhoto').files[0];
   if (photo) {
     const path = `${signedInUser.id}/profile-${crypto.randomUUID()}-${safeFileName(photo.name)}`;
@@ -429,7 +448,7 @@ window.updateHighlightCount = function () {
 };
 
 async function loadRealPosts() {
-  const { data } = await supabase.from('posts').select('*, student_profiles!posts_author_id_fkey(id, full_name, university, course, interests, bio, avatar_url), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
+  const { data } = await supabase.from('posts').select('*, student_profiles!posts_author_id_fkey(id, full_name, university, course, interests, bio, avatar_url), post_images(*), opportunities(title, company, field, location, description, application_url)').order('created_at', { ascending: false });
   if (!data) return;
   const { data: myConnections = [] } = await supabase.from('connections').select('requester_id, recipient_id').eq('status', 'accepted').or(`requester_id.eq.${signedInUser.id},recipient_id.eq.${signedInUser.id}`);
   const friendIds = new Set(myConnections.map((link) => link.requester_id === signedInUser.id ? link.recipient_id : link.requester_id));
@@ -446,13 +465,15 @@ async function loadRealPosts() {
   data.forEach((post) => {
     const element = document.createElement('article'); element.className = 'post';
     const photos = document.createElement('div'); photos.className = 'post-images';
-    post.post_images.sort((a,b) => a.position-b.position).forEach((image) => { const tile = document.createElement('div'); tile.style.backgroundImage = `url("${image.image_url}")`; photos.appendChild(tile); });
+    (post.post_images || []).sort((a,b) => a.position-b.position).forEach((image) => { const tile = document.createElement('div'); tile.style.backgroundImage = `url("${image.image_url}")`; photos.appendChild(tile); });
     element.innerHTML = `<div class="post-head" style="cursor:pointer"><div class="avatar me"></div><div><h4>${escapeHtml(post.student_profiles?.full_name || 'Student')} <small>· ${escapeHtml(post.student_profiles?.university || '')}</small></h4><small>Highlights of the Week</small></div></div>`;
     const postAvatar = element.querySelector('.avatar'); postAvatar.style.backgroundImage = post.student_profiles?.avatar_url ? `url("${post.student_profiles.avatar_url}")` : 'none';
     if (post.student_profiles?.id !== signedInUser.id) element.querySelector('.post-head').onclick = () => openRealProfile(post.student_profiles);
-    element.appendChild(photos);
-    photos.style.cursor = 'pointer';
-    photos.onclick = () => openHighlightPost(post.id);
+    if (post.kind === 'internship') {
+      const job = post.opportunities || {}; const jobCard = document.createElement('div'); jobCard.className = 'internship-feed-card';
+      jobCard.innerHTML = `<span>INTERNSHIP</span><h3>${escapeHtml(job.title || 'Internship opportunity')}</h3><p>${escapeHtml(job.company || '')}${job.location ? ` · ${escapeHtml(job.location)}` : ''}</p><p>${escapeHtml(job.description || post.caption || '')}</p>${job.application_url ? `<a href="${escapeHtml(job.application_url)}" target="_blank">View application →</a>` : ''}`;
+      element.appendChild(jobCard);
+    } else { element.appendChild(photos); photos.style.cursor = 'pointer'; photos.onclick = () => openHighlightPost(post.id); }
     const postLikes = likes.filter((like) => like.post_id === post.id);
     const postComments = comments.filter((comment) => comment.post_id === post.id);
     const liked = postLikes.some((like) => like.user_id === signedInUser.id);
