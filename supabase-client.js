@@ -290,16 +290,18 @@ async function openRealProfile(person) {
   const avatar = document.getElementById('profileAvatar');
   avatar.style.backgroundImage = person.avatar_url ? `url("${person.avatar_url}")` : 'none';
   const button = document.getElementById('connectButton');
-  button.style.display = ''; button.textContent = 'Send connection request'; button.disabled = false; button.style.opacity = '1';
+  button.style.display = ''; button.textContent = 'Checking saved request…'; button.disabled = true; button.style.opacity = '.65';
   button.onclick = window.sendConnectionRequest;
   const pairFilter = `and(requester_id.eq.${signedInUser.id},recipient_id.eq.${person.id}),and(requester_id.eq.${person.id},recipient_id.eq.${signedInUser.id})`;
-  const { data: connection } = await supabase.from('connections').select('status, requester_id').or(pairFilter).maybeSingle();
+  const { data: connection, error: connectionError } = await supabase.from('connections').select('status, requester_id').or(pairFilter).maybeSingle();
   if (connection?.status === 'accepted') {
     button.textContent = 'Unfriend'; button.disabled = false; button.style.opacity = '1'; button.onclick = () => unfriendPerson(person.id);
   } else if (connection?.status === 'pending') {
     button.textContent = connection.requester_id === signedInUser.id ? 'Request sent' : 'Request received'; button.disabled = true; button.style.opacity = '.65';
   } else if (connection?.status === 'declined') {
     button.textContent = 'Request declined'; button.disabled = true; button.style.opacity = '.65';
+  } else {
+    button.textContent = connectionError ? 'Could not check request' : 'Send connection request'; button.disabled = Boolean(connectionError); button.style.opacity = connectionError ? '.65' : '1';
   }
   const messageButton = document.querySelector('#profile .primary-btn');
   messageButton.textContent = 'Message'; messageButton.onclick = () => openDirectChat(person);
@@ -391,6 +393,15 @@ window.searchPeople = async function () { await loadMembers(); window.showView('
 
 window.sendConnectionRequest = async function () {
   if (!selectedMember) return message('Open a real student profile from Explore first.');
+  const pairFilter = `and(requester_id.eq.${signedInUser.id},recipient_id.eq.${selectedMember.id}),and(requester_id.eq.${selectedMember.id},recipient_id.eq.${signedInUser.id})`;
+  const { data: alreadySaved } = await supabase.from('connections').select('status, requester_id').or(pairFilter).maybeSingle();
+  if (alreadySaved) {
+    const button = document.getElementById('connectButton');
+    button.textContent = alreadySaved.status === 'accepted' ? 'Unfriend' : (alreadySaved.requester_id === signedInUser.id ? 'Request sent' : 'Request received');
+    button.disabled = alreadySaved.status !== 'accepted'; button.style.opacity = button.disabled ? '.65' : '1';
+    if (alreadySaved.status === 'accepted') button.onclick = () => unfriendPerson(selectedMember.id);
+    return;
+  }
   const { error } = await supabase.from('connections').insert({ requester_id: signedInUser.id, recipient_id: selectedMember.id });
   if (error?.code === '23505') { const button = document.getElementById('connectButton'); button.textContent = 'Request sent'; button.disabled = true; button.style.opacity = '.65'; return; }
   if (error) return message(error.message);
