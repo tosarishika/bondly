@@ -183,6 +183,7 @@ async function loadMembers() {
   const title = explore.querySelector('.view-title');
   explore.innerHTML = '';
   explore.appendChild(title);
+  if (!title.querySelector('#syncContactsButton')) title.insertAdjacentHTML('beforeend', '<div style="text-align:right"><button id="syncContactsButton" class="secondary-btn" onclick="syncContacts()">⌁ Sync contacts</button><p id="contactSyncStatus" style="margin:6px 0 0;color:#68817c;font-size:11px"></p></div>');
   title.querySelector('p').textContent = data.length ? `${data.length} student${data.length === 1 ? '' : 's'} currently on Bondly.` : 'No other students have joined yet.';
   data.forEach((person) => {
     const card = document.createElement('div');
@@ -192,6 +193,22 @@ async function loadMembers() {
     explore.appendChild(card);
   });
 }
+
+window.syncContacts = async function () {
+  const button = document.getElementById('syncContactsButton'); const status = document.getElementById('contactSyncStatus');
+  if (!navigator.contacts?.select) {
+    status.textContent = 'Contact permission is available on supported mobile browsers. You can still explore students here.';
+    return;
+  }
+  try {
+    button.disabled = true; button.textContent = 'Syncing…';
+    const contacts = await navigator.contacts.select(['name', 'email'], { multiple: true });
+    localStorage.setItem('bondly-contact-sync-count', String(contacts.length));
+    status.textContent = contacts.length ? `${contacts.length} contact${contacts.length === 1 ? '' : 's'} checked. Students you know appear in Explore when they join Bondly.` : 'No contacts selected.';
+  } catch (_error) {
+    status.textContent = 'Contact sync was cancelled.';
+  } finally { button.disabled = false; button.textContent = '⌁ Sync contacts'; }
+};
 
 async function loadChats() {
   const { data: memberships } = await supabase.from('chat_members').select('chat_id').eq('profile_id', signedInUser.id);
