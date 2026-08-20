@@ -50,6 +50,9 @@ document.querySelector('.my-card').onclick = () => openMyProfile();
 function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
   const globalSearch = document.getElementById('globalSearch'); if (globalSearch) globalSearch.placeholder = 'Search students or universities';
+  document.querySelector('.chat-list').innerHTML = '<p class="empty-chat-list">No chats yet.<br><small>Open a student profile and press Message to start one.</small></p>';
+  document.getElementById('chatHead').textContent = 'Choose a conversation';
+  document.getElementById('messageList').innerHTML = '<p class="empty-chat-message">Choose someone from your chat list.</p>';
   topbar.insertAdjacentHTML('beforeend', '<div id="searchQuickActions" class="search-quick-actions"><button onclick="syncContacts()">⌁ Synchronize contacts</button><button onclick="inviteToBondly()">↗ Invite someone</button></div>');
   globalSearch?.addEventListener('focus', () => document.getElementById('searchQuickActions').classList.add('show'));
   globalSearch?.addEventListener('blur', () => setTimeout(() => document.getElementById('searchQuickActions')?.classList.remove('show'), 180));
@@ -270,6 +273,7 @@ async function loadChats() {
     row.innerHTML = `<div class="avatar" style="width:38px;height:38px;background-image:${other.avatar_url ? `url('${escapeHtml(other.avatar_url)}')` : 'none'}"></div><div><strong>${escapeHtml(other.full_name)}</strong><small>${escapeHtml(other.university)}</small></div>`;
     row.onclick = () => resumeChat(membership.chat_id, other); list.appendChild(row);
   }
+  if (!shownPeople.size) list.innerHTML = '<p class="empty-chat-list">No chats yet.<br><small>Open a student profile and press Message to start one.</small></p>';
 }
 
 async function resumeChat(chatId, person) {
