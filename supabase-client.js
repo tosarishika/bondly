@@ -221,6 +221,58 @@ window.publishAccommodation = async function () {
   await loadAccommodations();
 };
 
+function ensureRoomsUi() {
+  if (document.getElementById('rooms')) return;
+  const nav = document.createElement('div'); nav.className = 'nav-item'; nav.dataset.view = 'rooms'; nav.innerHTML = '<span class="icon">◫</span><span>Rooms</span>'; nav.onclick = () => { window.showView('rooms'); loadRooms(); };
+  document.querySelector('.nav-item[data-view="help"]').insertAdjacentElement('beforebegin', nav);
+  const view = document.createElement('div'); view.className = 'view'; view.id = 'rooms'; view.innerHTML = '<div class="view-title"><div><h2>Study rooms</h2><p>Study together, share notes, and invite your people.</p></div><button class="secondary-btn" onclick="createRoom()">+ Create room</button></div><div id="roomsList"></div>';
+  document.querySelector('.content').appendChild(view);
+}
+
+async function loadRooms() {
+  ensureRoomsUi();
+  const list = document.getElementById('roomsList');
+  const { data, error } = await supabase.from('study_rooms').select('*, room_members(profile_id, student_profiles(full_name))').order('created_at', { ascending: false });
+  if (error) { list.innerHTML = '<p style="color:#68817c">Rooms are ready after you run the Rooms SQL setup in Supabase.</p>'; return; }
+  if (!data?.length) { list.innerHTML = '<p style="color:#68817c">No rooms yet. Create the first study room.</p>'; return; }
+  list.innerHTML = '';
+  data.forEach((room) => {
+    const members = room.room_members || []; const joined = members.some((member) => member.profile_id === signedInUser.id);
+    const card = document.createElement('div'); card.className = 'list-card';
+    card.innerHTML = `<span class="tag">${escapeHtml(room.study_level)}</span><h3>${escapeHtml(room.name)}</h3><p><b>${escapeHtml(room.subject || 'Study room')}</b><br>${escapeHtml(room.description || '')}</p><p style="font-size:12px">${members.length} member${members.length === 1 ? '' : 's'} · ${members.map((member) => escapeHtml(member.student_profiles?.full_name || 'Student')).join(', ')}</p>`;
+    const button = document.createElement('button'); button.className = joined ? 'secondary-btn' : 'primary-btn'; button.style.cssText = 'margin-top:8px;padding:9px 13px'; button.textContent = joined ? 'Open room' : 'Join room'; button.onclick = () => joined ? openRoom(room.id) : joinStudyRoom(room.id); card.appendChild(button); list.appendChild(card);
+  });
+}
+
+window.createRoom = async function () {
+  const name = window.prompt('Room name (for example: CS exam prep)'); if (!name?.trim()) return;
+  const subject = window.prompt('Subject or course (optional)') || '';
+  const study_level = window.prompt('Study level: Foundation / Year 1 / Year 2 / Year 3 / Year 4 / Postgraduate / Any level', 'Any level') || 'Any level';
+  const description = window.prompt('What will you study together?') || '';
+  const invite_code = crypto.randomUUID().replaceAll('-', '').slice(0, 10);
+  const { data: room, error } = await supabase.from('study_rooms').insert({ owner_id: signedInUser.id, name: name.trim(), subject, study_level, description, invite_code }).select().single();
+  if (error) return message(error.message);
+  const { error: memberError } = await supabase.from('room_members').insert({ room_id: room.id, profile_id: signedInUser.id });
+  if (memberError) return message(memberError.message);
+  await openRoom(room.id);
+};
+
+async function joinStudyRoom(roomId) {
+  const { error } = await supabase.from('room_members').insert({ room_id: roomId, profile_id: signedInUser.id });
+  if (error?.code !== '23505' && error) return message(error.message);
+  await openRoom(roomId);
+}
+
+async function openRoom(roomId) {
+  const { data: room, error } = await supabase.from('study_rooms').select('*, room_members(profile_id, student_profiles(full_name)), room_notes(note_id, notes(subject, topic, file_url))').eq('id', roomId).single();
+  if (error) return message(error.message);
+  const link = `${window.location.origin}?room=${room.invite_code}`; const mine = room.owner_id === signedInUser.id;
+  document.getElementById('roomsList').innerHTML = `<button class="secondary-btn" onclick="loadRooms()">← All rooms</button><div class="list-card" style="margin-top:15px"><span class="tag">${escapeHtml(room.study_level)}</span><h2>${escapeHtml(room.name)}</h2><p><b>${escapeHtml(room.subject || '')}</b><br>${escapeHtml(room.description || '')}</p><h3>Members</h3><p>${room.room_members.map((member) => escapeHtml(member.student_profiles?.full_name || 'Student')).join(' · ')}</p><h3>Shared notes</h3>${room.room_notes.length ? room.room_notes.map((item) => `<p><a target="_blank" href="${escapeHtml(item.notes?.file_url || '#')}">${escapeHtml(item.notes?.subject || 'Note')} — ${escapeHtml(item.notes?.topic || '')}</a></p>`).join('') : '<p>No notes shared yet.</p>'}<button class="primary-btn" style="margin-top:10px" onclick="shareRoomLink('${room.invite_code}')">Share invite</button>${mine ? `<button class="secondary-btn" style="margin-left:8px;color:#b5493a;border-color:#b5493a" onclick="deleteRoom('${room.id}')">Delete room</button>` : ''}<p style="font-size:12px;word-break:break-all">${escapeHtml(link)}</p></div>`;
+}
+
+window.shareRoomLink = (code) => { const link = `${window.location.origin}?room=${code}`; navigator.share ? navigator.share({ title: 'Join my Bondly study room', url: link }).catch(() => {}) : window.prompt('Copy this invite link:', link); };
+window.deleteRoom = async (roomId) => { if (!window.confirm('Delete this room?')) return; const { error } = await supabase.from('study_rooms').delete().eq('id', roomId).eq('owner_id', signedInUser.id); if (error) return message(error.message); loadRooms(); };
+
 async function loadMembers() {
   const { data, error } = await supabase.from('student_profiles').select('*').neq('id', signedInUser.id).order('created_at', { ascending: false });
   if (error) return;
