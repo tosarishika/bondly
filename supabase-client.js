@@ -9,6 +9,7 @@ let signedInUser = null;
 let selectedMember = null;
 let activeChatId = null;
 let unreadMessageCount = 0;
+let pendingSharedPost = null;
 const localLaunch = window.launchApp;
 
 function addProfileSetupFields() {
@@ -27,6 +28,10 @@ function setupProductFeatures() {
   document.querySelector('.send').insertAdjacentHTML('afterbegin', '<input id="chatFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="showSelectedChatFile()"><button id="chatAttachButton" type="button" title="Attach a photo or PDF" onclick="document.getElementById(\'chatFile\').click()" style="background:transparent;color:#176b57;font-size:21px;padding:2px 5px">📎</button><span id="chatFileName" style="font-size:11px;color:#68817c;max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>');
   topbar.insertAdjacentHTML('beforeend', '<button id="notificationsButton" class="secondary-btn" style="position:relative" onclick="showNotifications()">♡ <span id="notificationCount" style="display:none;position:absolute;top:-7px;right:-7px;background:#f0826c;color:#fff;border-radius:99px;padding:1px 5px;font-size:10px">0</span></button>');
   const notifications = document.createElement('div'); notifications.className = 'view'; notifications.id = 'notifications'; notifications.innerHTML = '<div class="view-title"><div><h2>Notifications</h2><p>Connection requests and matching internships.</p></div></div><div id="notificationsList"></div>'; document.querySelector('.content').appendChild(notifications);
+  const accommodationNav = document.createElement('div'); accommodationNav.className = 'nav-item'; accommodationNav.dataset.view = 'accommodations'; accommodationNav.innerHTML = '<span class="icon">⌂</span><span>Accommodations</span>'; accommodationNav.onclick = () => window.showView('accommodations'); document.querySelector('.nav-item[data-view="opportunities"]').insertAdjacentElement('afterend', accommodationNav);
+  const accommodations = document.createElement('div'); accommodations.className = 'view'; accommodations.id = 'accommodations'; accommodations.innerHTML = '<div class="view-title"><div><h2>Accommodations</h2><p>Find roommates, rooms, and student-friendly housing.</p></div><button class="secondary-btn" onclick="document.getElementById(\'accommodationModal\').classList.add(\'show\')">+ Post listing</button></div><div id="accommodationsList"></div>'; document.querySelector('.content').appendChild(accommodations);
+  const accommodationModal = document.createElement('div'); accommodationModal.className = 'highlight-modal'; accommodationModal.id = 'accommodationModal'; accommodationModal.innerHTML = '<div class="dialog"><h2>Post accommodation</h2><p>Share a room, flat, roommate request, or housing lead.</p><select id="accommodationType" class="field"><option value="">What are you posting?</option><option>Room available</option><option>Looking for a roommate</option><option>Flat / studio available</option><option>Housing advice / lead</option></select><input id="accommodationTitle" class="field" placeholder="Title — e.g. Room near University of Dubai"><input id="accommodationArea" class="field" placeholder="Area / neighbourhood"><input id="accommodationPrice" class="field" placeholder="Monthly budget (optional)"><textarea id="accommodationDescription" class="field" placeholder="Add useful details, availability, and preferences"></textarea><p id="accommodationError" class="highlight-status"></p><button class="primary-btn wide" onclick="publishAccommodation()">Post listing</button><div class="switch"><a onclick="document.getElementById(\'accommodationModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(accommodationModal);
+  const shareModal = document.createElement('div'); shareModal.className = 'highlight-modal'; shareModal.id = 'sharePostModal'; shareModal.innerHTML = '<div class="dialog"><h2>Share highlight</h2><p>Choose a student to send this post to.</p><div id="sharePeopleList"></div><div class="switch"><a onclick="document.getElementById(\'sharePostModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(shareModal);
   const postModal = document.createElement('div'); postModal.className = 'highlight-modal'; postModal.id = 'postModal';
   postModal.innerHTML = '<div class="dialog" style="max-width:700px;padding:0;overflow:hidden"><button onclick="closePostModal()" aria-label="Close post" style="position:absolute;right:22px;top:18px;z-index:2;border-radius:50%;background:#fff;width:34px;height:34px;font-size:20px">×</button><div id="openedPost"></div></div>';
   postModal.onclick = (event) => { if (event.target === postModal) window.closePostModal(); };
@@ -109,6 +114,35 @@ window.launchApp = async function () {
   await loadRealPosts();
   await loadNotes();
   await loadNotifications();
+  await loadAccommodations();
+};
+
+async function loadAccommodations() {
+  const list = document.getElementById('accommodationsList'); if (!list) return;
+  const { data, error } = await supabase.from('accommodations').select('*, student_profiles(id, full_name, university, avatar_url)').order('created_at', { ascending: false });
+  if (error) { list.innerHTML = '<p style="color:#68817c">No accommodation listings yet.</p>'; return; }
+  list.innerHTML = '';
+  if (!data?.length) { list.innerHTML = '<p style="color:#68817c">No listings yet. Be the first to share one.</p>'; return; }
+  data.forEach((item) => {
+    const card = document.createElement('div'); card.className = 'list-card';
+    card.innerHTML = `<span class="tag">${escapeHtml(item.listing_type)}</span><h3>${escapeHtml(item.title)}</h3><p><b>${escapeHtml(item.area || 'Dubai')}</b>${item.price ? ` · ${escapeHtml(item.price)}` : ''}<br>${escapeHtml(item.description)}<br><br>Posted by <b>${escapeHtml(item.student_profiles?.full_name || 'Student')}</b> · ${escapeHtml(item.student_profiles?.university || '')}</p>`;
+    const contact = document.createElement('button'); contact.className = 'secondary-btn'; contact.style.marginTop = '12px'; contact.textContent = 'Message'; contact.onclick = () => openDirectChat(item.student_profiles); card.appendChild(contact); list.appendChild(card);
+  });
+}
+
+window.publishAccommodation = async function () {
+  const listing_type = document.getElementById('accommodationType').value;
+  const title = document.getElementById('accommodationTitle').value.trim();
+  const area = document.getElementById('accommodationArea').value.trim();
+  const price = document.getElementById('accommodationPrice').value.trim();
+  const description = document.getElementById('accommodationDescription').value.trim();
+  const errorBox = document.getElementById('accommodationError');
+  if (!listing_type || !title || !description) { errorBox.textContent = 'Add a type, title, and description.'; return; }
+  const { error } = await supabase.from('accommodations').insert({ author_id: signedInUser.id, listing_type, title, area, price, description });
+  if (error) { errorBox.textContent = error.message; return; }
+  document.getElementById('accommodationModal').classList.remove('show');
+  ['accommodationType','accommodationTitle','accommodationArea','accommodationPrice','accommodationDescription'].forEach((id) => { document.getElementById(id).value = ''; });
+  await loadAccommodations();
 };
 
 async function loadMembers() {
@@ -346,6 +380,9 @@ window.updateHighlightCount = function () {
 async function loadRealPosts() {
   const { data } = await supabase.from('posts').select('*, student_profiles(id, full_name, university, course, interests, bio, avatar_url), post_images(*)').eq('kind', 'weekly_highlight').order('created_at', { ascending: false });
   if (!data) return;
+  const { data: myConnections = [] } = await supabase.from('connections').select('requester_id, recipient_id').eq('status', 'accepted').or(`requester_id.eq.${signedInUser.id},recipient_id.eq.${signedInUser.id}`);
+  const friendIds = new Set(myConnections.map((link) => link.requester_id === signedInUser.id ? link.recipient_id : link.requester_id));
+  data.sort((a, b) => Number(friendIds.has(b.author_id)) - Number(friendIds.has(a.author_id)) || new Date(b.created_at) - new Date(a.created_at));
   const container = document.getElementById('highlightsFeed'); container.innerHTML = '';
   const postIds = data.map((post) => post.id);
   const [{ data: likesData, error: likesError }, { data: commentsData, error: commentsError }] = await Promise.all([
@@ -368,7 +405,7 @@ async function loadRealPosts() {
     const postComments = comments.filter((comment) => comment.post_id === post.id);
     const liked = postLikes.some((like) => like.user_id === signedInUser.id);
     const body = document.createElement('div'); body.className = 'post-body';
-    body.innerHTML = `<div class="post-actions"><button class="post-action ${liked ? 'liked' : ''}" aria-label="Like highlight">${liked ? '♥' : '♡'} <span>${postLikes.length || ''}</span></button><button class="post-action comment-toggle" aria-label="Comment on highlight">◌ <span>${postComments.length || ''}</span></button></div><p>${escapeHtml(post.caption)}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`;
+    body.innerHTML = `<div class="post-actions"><button class="post-action ${liked ? 'liked' : ''}" aria-label="Like highlight">${liked ? '♥' : '♡'} <span>${postLikes.length || ''}</span></button><button class="post-action comment-toggle" aria-label="Comment on highlight">◌ <span>${postComments.length || ''}</span></button><button class="post-action share-toggle" aria-label="Share highlight">↗</button></div><p>${escapeHtml(post.caption)}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`;
     body.querySelector('.post-action').onclick = () => togglePostLike(post.id);
     const commentsArea = document.createElement('div'); commentsArea.className = 'post-comments';
     commentsArea.innerHTML = postComments.map((comment) => `<p><b>${escapeHtml(comment.student_profiles?.full_name || 'Student')}</b> ${escapeHtml(comment.body)}</p>`).join('');
@@ -376,8 +413,33 @@ async function loadRealPosts() {
     composer.querySelector('button').onclick = () => addPostComment(post.id, composer.querySelector('input').value);
     composer.querySelector('input').onkeydown = (event) => { if (event.key === 'Enter') addPostComment(post.id, event.currentTarget.value); };
     body.querySelector('.comment-toggle').onclick = () => { commentsArea.classList.toggle('show'); composer.classList.toggle('show'); if (commentsArea.classList.contains('show')) composer.querySelector('input').focus(); };
+    body.querySelector('.share-toggle').onclick = () => showSharePost(post);
     body.append(commentsArea, composer); element.appendChild(body); container.appendChild(element);
   });
+}
+
+async function showSharePost(post) {
+  pendingSharedPost = post;
+  const list = document.getElementById('sharePeopleList'); list.innerHTML = 'Loading students…';
+  const { data: people = [] } = await supabase.from('student_profiles').select('id, full_name, university, avatar_url').neq('id', signedInUser.id).order('full_name');
+  list.innerHTML = '';
+  people.forEach((person) => {
+    const row = document.createElement('button'); row.className = 'list-card'; row.style.cssText = 'width:100%;text-align:left;cursor:pointer;margin:8px 0'; row.innerHTML = `<b>${escapeHtml(person.full_name)}</b><br><small>${escapeHtml(person.university)}</small>`;
+    row.onclick = () => sharePostToPerson(person); list.appendChild(row);
+  });
+  if (!people.length) list.textContent = 'No other students have joined yet.';
+  document.getElementById('sharePostModal').classList.add('show');
+}
+
+async function sharePostToPerson(person) {
+  if (!pendingSharedPost) return;
+  const post = pendingSharedPost;
+  const { data: chatId, error } = await supabase.rpc('create_bondly_direct_chat', { other_user_id: person.id });
+  if (error) return message(error.message);
+  const sharedText = `Shared a highlight from ${post.student_profiles?.full_name || 'a Bondly student'}: ${post.caption || 'Weekly highlight'} ${(post.hashtags || []).join(' ')}`;
+  const { error: sendError } = await supabase.from('messages').insert({ chat_id: chatId, sender_id: signedInUser.id, body: sharedText });
+  if (sendError) return message(sendError.message);
+  document.getElementById('sharePostModal').classList.remove('show'); pendingSharedPost = null; message(`Sent to ${person.full_name}.`);
 }
 
 window.closePostModal = function () { document.getElementById('postModal').classList.remove('show'); };
