@@ -405,7 +405,7 @@ async function loadRealPosts() {
     const postComments = comments.filter((comment) => comment.post_id === post.id);
     const liked = postLikes.some((like) => like.user_id === signedInUser.id);
     const body = document.createElement('div'); body.className = 'post-body';
-    body.innerHTML = `<div class="post-actions"><button class="post-action ${liked ? 'liked' : ''}" aria-label="Like highlight">${liked ? '♥' : '♡'} <span>${postLikes.length || ''}</span></button><button class="post-action comment-toggle" aria-label="Comment on highlight">◌ <span>${postComments.length || ''}</span></button><button class="post-action share-toggle" aria-label="Share highlight">↗</button></div><p>${escapeHtml(post.caption)}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`;
+    body.innerHTML = `<div class="post-actions"><button class="post-action ${liked ? 'liked' : ''}" aria-label="Like highlight">${liked ? '♥' : '♡'} <span>${postLikes.length || ''}</span></button><button class="post-action comment-toggle" aria-label="Comment on highlight">💬 <span>${postComments.length || ''}</span></button><button class="post-action share-toggle" aria-label="Share highlight">✈</button></div><p>${escapeHtml(post.caption)}</p><p style="color:#176b57">${escapeHtml((post.hashtags || []).join(' '))}</p>`;
     body.querySelector('.post-action').onclick = () => togglePostLike(post.id);
     const commentsArea = document.createElement('div'); commentsArea.className = 'post-comments';
     commentsArea.innerHTML = postComments.map((comment) => `<p><b>${escapeHtml(comment.student_profiles?.full_name || 'Student')}</b> ${escapeHtml(comment.body)}</p>`).join('');
@@ -436,8 +436,7 @@ async function sharePostToPerson(person) {
   const post = pendingSharedPost;
   const { data: chatId, error } = await supabase.rpc('create_bondly_direct_chat', { other_user_id: person.id });
   if (error) return message(error.message);
-  const sharedText = `Shared a highlight from ${post.student_profiles?.full_name || 'a Bondly student'}: ${post.caption || 'Weekly highlight'} ${(post.hashtags || []).join(' ')}`;
-  const { error: sendError } = await supabase.from('messages').insert({ chat_id: chatId, sender_id: signedInUser.id, body: sharedText });
+  const { error: sendError } = await supabase.from('messages').insert({ chat_id: chatId, sender_id: signedInUser.id, body: '', shared_post_id: post.id });
   if (sendError) return message(sendError.message);
   document.getElementById('sharePostModal').classList.remove('show'); pendingSharedPost = null; message(`Sent to ${person.full_name}.`);
 }
@@ -498,13 +497,22 @@ async function loadMessages() {
   if (!activeChatId) return;
   const { data } = await supabase.from('messages').select('*').eq('chat_id', activeChatId).order('created_at');
   const list = document.getElementById('messageList'); list.innerHTML = '';
-  (data || []).forEach(renderMessage);
+  for (const item of (data || [])) await renderMessage(item);
 }
 
-function renderMessage(item) {
+async function renderMessage(item) {
   const bubble = document.createElement('div');
   bubble.className = item.sender_id === signedInUser.id ? 'bubble-msg mine' : 'bubble-msg';
   if (item.body) bubble.append(document.createTextNode(item.body));
+  if (item.shared_post_id) {
+    const { data: post } = await supabase.from('posts').select('id, caption, hashtags, student_profiles!posts_author_id_fkey(full_name), post_images(image_url, position)').eq('id', item.shared_post_id).maybeSingle();
+    if (post) {
+      const card = document.createElement('button'); card.className = 'shared-post-card';
+      const firstPhoto = (post.post_images || []).sort((a, b) => a.position - b.position)[0]?.image_url;
+      card.innerHTML = `${firstPhoto ? `<img src="${escapeHtml(firstPhoto)}" alt="Shared highlight">` : ''}<span><small>Bondly highlight</small><b>${escapeHtml(post.student_profiles?.full_name || 'Student')}</b><em>${escapeHtml(post.caption || 'Weekly highlight')}</em><strong>Open post →</strong></span>`;
+      card.onclick = () => openHighlightPost(post.id); bubble.appendChild(card);
+    } else bubble.append(document.createTextNode('Shared a highlight that is no longer available.'));
+  }
   if (item.attachment_url) {
     const attachment = document.createElement(item.attachment_type?.startsWith('image/') ? 'img' : 'a');
     if (attachment.tagName === 'IMG') { attachment.src = item.attachment_url; attachment.alt = item.attachment_name || 'Image'; attachment.style.cssText = 'display:block;max-width:190px;max-height:190px;object-fit:cover;border-radius:8px;margin-top:7px'; }
@@ -530,7 +538,7 @@ window.sendMessage = async function () {
   }
   const { data, error } = await supabase.from('messages').insert({ chat_id: activeChatId, sender_id: signedInUser.id, body, attachment_url, attachment_name, attachment_type }).select().single();
   if (error) return message(error.message);
-  input.value = ''; fileInput.value = ''; document.getElementById('chatFileName').textContent = ''; renderMessage(data);
+  input.value = ''; fileInput.value = ''; document.getElementById('chatFileName').textContent = ''; await renderMessage(data);
 };
 
 window.showSelectedChatFile = function () {
