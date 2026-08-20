@@ -178,6 +178,12 @@ window.launchApp = async function () {
   await loadNotes();
   await loadNotifications();
   await loadAccommodations();
+  await loadRooms();
+  const roomCode = new URLSearchParams(window.location.search).get('room');
+  if (roomCode) {
+    const { data: invitedRoom } = await supabase.from('study_rooms').select('id').eq('invite_code', roomCode).maybeSingle();
+    if (invitedRoom) { await joinStudyRoom(invitedRoom.id); window.history.replaceState({}, '', window.location.pathname); window.showView('rooms'); }
+  }
 };
 
 async function loadAccommodations() {
