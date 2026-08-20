@@ -12,6 +12,31 @@ let unreadMessageCount = 0;
 let pendingSharedPost = null;
 const localLaunch = window.launchApp;
 
+const uaeUniversities = [
+  'Abu Dhabi University', 'Ajman University', 'Al Ain University', 'Al Dar University College', 'Al Falah University', 'Al Qasimia University', 'Al WAsl University',
+  'American University in Dubai', 'American University of Ras Al Khaimah', 'American University of Sharjah', 'American University in the Emirates',
+  'Amity University Dubai', 'Bahrain Institute of Banking and Finance Dubai', 'Birmingham City University Dubai', 'The British University in Dubai',
+  'Canadian University Dubai', 'Capital University College', 'City University Ajman', 'Curtin University Dubai', 'De Montfort University Dubai',
+  'Dubai Institute of Design and Innovation', 'Dubai Medical College', 'Dubai Pharmacy College', 'Emirates Aviation University', 'Emirates College for Advanced Education',
+  'Fatima College of Health Sciences', 'Gulf Medical University', 'Hamdan Bin Mohammed Smart University', 'Higher Colleges of Technology',
+  'Heriot-Watt University Dubai', 'Institute of Management Technology Dubai', 'Jumeira University', 'Khalifa University', 'Liwa College',
+  'Manipal Academy of Higher Education Dubai', 'Middlesex University Dubai', 'Mohammed Bin Rashid School of Government', 'Mohammed Bin Rashid University of Medicine and Health Sciences',
+  'Mohamed bin Zayed University of Artificial Intelligence', 'Murdoch University Dubai', 'National Defense College', 'New York University Abu Dhabi',
+  'Ras Al Khaimah Medical and Health Sciences University', 'Rabdan Academy', 'Rochester Institute of Technology Dubai', 'SAE Institute Dubai',
+  'Sharjah Maritime Academy', 'Skyline University College', 'Sorbonne University Abu Dhabi', 'SP Jain School of Global Management Dubai',
+  'Swiss International Scientific School Dubai', 'Synergy University Dubai', 'University of Birmingham Dubai', 'University of Dubai',
+  'University of Khorfakkan', 'University of Sharjah', 'University of Wollongong in Dubai', 'United Arab Emirates University',
+  'Zayed University', 'Other UAE university / college'
+];
+
+function populateUniversitySelects() {
+  document.querySelectorAll('.onboard-card select, #editUniversity').forEach((select) => {
+    const chosen = select.value;
+    select.innerHTML = uaeUniversities.map((university) => `<option>${university}</option>`).join('');
+    if (uaeUniversities.includes(chosen)) select.value = chosen;
+  });
+}
+
 function addProfileSetupFields() {
   const card = document.querySelector('.onboard-card');
   if (document.getElementById('profileFullName')) return;
@@ -19,6 +44,7 @@ function addProfileSetupFields() {
   universityLabel.insertAdjacentHTML('beforebegin', '<label>Your name</label><input id="profileFullName" class="field" placeholder="Your full name"><label>Profile picture</label><input id="profilePhoto" class="field" type="file" accept="image/*"><label>Contact number <small>(optional, for finding contacts)</small></label><input id="profilePhone" class="field" type="tel" placeholder="e.g. +971 50 123 4567"><label>Short bio</label><textarea id="profileBioInput" class="field" placeholder="A little about you, your interests, or what you are looking for"></textarea>');
 }
 addProfileSetupFields();
+populateUniversitySelects();
 document.querySelector('.my-card').onclick = () => openMyProfile();
 
 function setupProductFeatures() {
@@ -55,6 +81,7 @@ function setupProductFeatures() {
   const editModal = document.createElement('div'); editModal.className = 'highlight-modal'; editModal.id = 'editProfileModal';
   editModal.innerHTML = '<div class="dialog"><h2>Edit your profile</h2><label>Name</label><input id="editName" class="field"><label>Profile picture</label><input id="editPhoto" class="field" type="file" accept="image/*"><label>Contact number <small>(optional, for contact sync)</small></label><input id="editPhone" class="field" type="tel"><label>University</label><select id="editUniversity" class="field"><option>University of Dubai</option><option>American University of Sharjah</option><option>Heriot-Watt University Dubai</option><option>University of Birmingham Dubai</option><option>Zayed University</option></select><label>Course and year</label><input id="editCourse" class="field" placeholder="e.g. Business Management, Year 2"><label>Bio</label><textarea id="editBio" class="field"></textarea><label>Interests</label><input id="editInterests" class="field" placeholder="Marketing, Finance, Design"><p id="editProfileError" class="highlight-status"></p><button class="primary-btn wide" onclick="saveProfileEdits()">Save changes</button><div class="switch"><a onclick="document.getElementById(\'editProfileModal\').classList.remove(\'show\')">Cancel</a></div></div>';
   document.body.appendChild(editModal);
+  populateUniversitySelects();
 
   const highlightModal = document.getElementById('highlightModal');
   highlightModal.querySelector('p').textContent = 'Add 1–7 photos, then write a caption and your hashtags.';
