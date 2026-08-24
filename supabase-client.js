@@ -50,6 +50,8 @@ document.querySelector('.my-card').onclick = () => openMyProfile();
 
 function setupProductFeatures() {
   const topbar = document.querySelector('.topbar');
+  const appLogo = document.querySelector('.side .logo');
+  if (appLogo) { appLogo.style.cursor = 'pointer'; appLogo.title = 'Join Bondly'; appLogo.onclick = () => { document.getElementById('mainApp').classList.remove('show'); document.getElementById('cover').style.display = ''; window.openLogin(true); }; }
   const globalSearch = document.getElementById('globalSearch'); if (globalSearch) globalSearch.placeholder = 'Search students or universities';
   document.querySelector('.chat-list').innerHTML = '<p class="empty-chat-list">No chats yet.<br><small>Open a student profile and press Message to start one.</small></p>';
   document.querySelector('.message-layout').classList.remove('chat-open');
