@@ -230,6 +230,7 @@ function ensureRoomsUi() {
   document.querySelector('.nav-item[data-view="help"]').insertAdjacentElement('beforebegin', nav);
   const view = document.createElement('div'); view.className = 'view'; view.id = 'rooms'; view.innerHTML = '<div class="view-title"><div><h2>Study rooms</h2><p>Study together, share notes, and invite your people.</p></div><button class="secondary-btn" onclick="createRoom()">+ Create room</button></div><div id="roomsList"></div>';
   document.querySelector('.content').appendChild(view);
+  const modal = document.createElement('div'); modal.className = 'highlight-modal'; modal.id = 'roomCreateModal'; modal.innerHTML = '<div class="dialog"><h2>Create a study room</h2><p>Set a name, subject, and level so the right students can join.</p><label>Room name</label><input id="newRoomName" class="field" placeholder="e.g. CS exam prep"><label>Subject</label><input id="newRoomSubject" class="field" placeholder="e.g. Data structures"><label>Study level</label><select id="newRoomLevel" class="field"><option>Any level</option><option>Foundation / Year 1</option><option>Year 2</option><option>Year 3</option><option>Year 4</option><option>Postgraduate</option></select><label>About this room</label><textarea id="newRoomDescription" class="field" placeholder="What will you work on together?"></textarea><p id="newRoomError" class="highlight-status"></p><button class="primary-btn wide" onclick="submitRoom()">Create room</button><div class="switch"><a onclick="document.getElementById(\'roomCreateModal\').classList.remove(\'show\')">Cancel</a></div></div>'; document.body.appendChild(modal);
 }
 
 async function loadRooms() {
@@ -250,16 +251,16 @@ async function loadRooms() {
   });
 }
 
-window.createRoom = async function () {
-  const name = window.prompt('Room name (for example: CS exam prep)'); if (!name?.trim()) return;
-  const subject = window.prompt('Subject or course (optional)') || '';
-  const study_level = window.prompt('Study level: Foundation / Year 1 / Year 2 / Year 3 / Year 4 / Postgraduate / Any level', 'Any level') || 'Any level';
-  const description = window.prompt('What will you study together?') || '';
+window.createRoom = function () { document.getElementById('roomCreateModal').classList.add('show'); };
+window.submitRoom = async function () {
+  const name = document.getElementById('newRoomName').value.trim(); const subject = document.getElementById('newRoomSubject').value.trim(); const study_level = document.getElementById('newRoomLevel').value; const description = document.getElementById('newRoomDescription').value.trim(); const errorBox = document.getElementById('newRoomError');
+  if (!name) { errorBox.textContent = 'Please give your room a name.'; return; }
   const invite_code = crypto.randomUUID().replaceAll('-', '').slice(0, 10);
-  const { data: room, error } = await supabase.from('study_rooms').insert({ owner_id: signedInUser.id, name: name.trim(), subject, study_level, description, invite_code }).select().single();
-  if (error) return message(error.message);
+  const { data: room, error } = await supabase.from('study_rooms').insert({ owner_id: signedInUser.id, name, subject, study_level, description, invite_code }).select().single();
+  if (error) { errorBox.textContent = error.message; return; }
   const { error: memberError } = await supabase.from('room_members').insert({ room_id: room.id, profile_id: signedInUser.id });
-  if (memberError) return message(memberError.message);
+  if (memberError) { errorBox.textContent = memberError.message; return; }
+  document.getElementById('roomCreateModal').classList.remove('show'); ['newRoomName','newRoomSubject','newRoomLevel','newRoomDescription'].forEach((id) => { document.getElementById(id).value = ''; });
   await openRoom(room.id);
 };
 
@@ -286,10 +287,11 @@ async function openRoom(roomId) {
   const { data: room, error } = await supabase.from('study_rooms').select('*, room_members(profile_id, student_profiles(full_name)), room_notes(note_id, notes(subject, topic, file_url))').eq('id', roomId).single();
   if (error) return message(error.message);
   const link = `${window.location.origin}?room=${room.invite_code}`; const mine = room.owner_id === signedInUser.id;
-  document.getElementById('roomsList').innerHTML = `<button class="secondary-btn" onclick="loadRooms()">← All rooms</button><div class="list-card" style="margin-top:15px"><span class="tag">${escapeHtml(room.study_level)}</span><h2>${escapeHtml(room.name)}</h2><p><b>${escapeHtml(room.subject || '')}</b><br>${escapeHtml(room.description || '')}</p><h3>Members</h3><p>${room.room_members.map((member) => escapeHtml(member.student_profiles?.full_name || 'Student')).join(' · ')}</p><h3>Shared notes</h3>${room.room_notes.length ? room.room_notes.map((item) => `<p><a target="_blank" href="${escapeHtml(item.notes?.file_url || '#')}">${escapeHtml(item.notes?.subject || 'Note')} — ${escapeHtml(item.notes?.topic || '')}</a></p>`).join('') : '<p>No notes shared yet.</p>'}<button class="primary-btn" style="margin-top:10px" onclick="shareRoomLink('${room.invite_code}')">Share invite</button>${mine ? `<button class="secondary-btn" style="margin-left:8px;color:#b5493a;border-color:#b5493a" onclick="deleteRoom('${room.id}')">Delete room</button>` : ''}<p style="font-size:12px;word-break:break-all">${escapeHtml(link)}</p></div>`;
+  document.getElementById('roomsList').innerHTML = `<button class="secondary-btn" onclick="loadRooms()">← All rooms</button><div class="list-card" style="margin-top:15px"><span class="tag">${escapeHtml(room.study_level)}</span><h2>${escapeHtml(room.name)}</h2><p><b>${escapeHtml(room.subject || '')}</b><br>${escapeHtml(room.description || '')}</p><h3>Members</h3><p>${room.room_members.map((member) => escapeHtml(member.student_profiles?.full_name || 'Student')).join(' · ')}</p><h3>Shared notes</h3>${room.room_notes.length ? room.room_notes.map((item) => `<p><a target="_blank" href="${escapeHtml(item.notes?.file_url || '#')}">${escapeHtml(item.notes?.subject || 'Note')} — ${escapeHtml(item.notes?.topic || '')}</a></p>`).join('') : '<p>No notes shared yet.</p>'}<button class="secondary-btn" onclick="shareNoteInRoom('${room.id}')">+ Share one of my notes</button><br><button class="primary-btn" style="margin-top:12px" onclick="shareRoomLink('${room.invite_code}')">Share invite</button>${mine ? `<button class="secondary-btn" style="margin-left:8px;color:#b5493a;border-color:#b5493a" onclick="deleteRoom('${room.id}')">Delete room</button>` : ''}<p style="font-size:12px;word-break:break-all">${escapeHtml(link)}</p></div>`;
 }
 
 window.shareRoomLink = (code) => { const link = `${window.location.origin}?room=${code}`; navigator.share ? navigator.share({ title: 'Join my Bondly study room', url: link }).catch(() => {}) : window.prompt('Copy this invite link:', link); };
+window.shareNoteInRoom = async (roomId) => { const { data: notes = [] } = await supabase.from('notes').select('id, subject, topic').eq('uploader_id', signedInUser.id); if (!notes.length) return message('Upload a note first, then share it here.'); const choices = notes.map((note, index) => `${index + 1}. ${note.subject} — ${note.topic}`).join('\n'); const pick = Number(window.prompt(`Choose a note to share:\n${choices}`)) - 1; if (!notes[pick]) return; const { error } = await supabase.from('room_notes').insert({ room_id: roomId, note_id: notes[pick].id, added_by: signedInUser.id }); if (error?.code !== '23505' && error) return message(error.message); await openRoom(roomId); };
 window.deleteRoom = async (roomId) => { if (!window.confirm('Delete this room?')) return; const { error } = await supabase.from('study_rooms').delete().eq('id', roomId).eq('owner_id', signedInUser.id); if (error) return message(error.message); loadRooms(); };
 
 async function loadMembers() {
