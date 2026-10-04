@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const supabase = createClient(
-  'https://vcennazfnqccvrnmfuvn.supabase.co',
-  'sb_publishable_YNz9KMB4mp758x2gtV99sQ_q6R5Ajrr'
+  'https://nbrjcysruwyegxatvfpq.supabase.co',
+  'sb_publishable_tdnT_dKfJpen_fVRxvTaXQ_V1FexgmO'
 );
 
 let signedInUser = null;
